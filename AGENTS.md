@@ -13,6 +13,8 @@
 - Run a sample map: `uv run wee-life2 --map-file maps/maze.json` (also `maps/islands.json`, `maps/arena.json`, `maps/corridors.json`, `maps/quadrants.json`)
 - Generic config override: `uv run wee-life2 --set KEY=VALUE` (repeatable; any `core/config.py` constant, e.g. `--set MATING_RATE=0.3 --set RADIATION_DAMAGE=0.5`), value is cast to match the existing constant's type (bool/int/float/str); errors out on an unknown key
 - Generic config inspection: `uv run wee-life2 --get KEY` (repeatable; prints current value(s) and exits without launching the sim/editor)
+- Load config from JSON: `uv run wee-life2 --config-file my_config.json` (flat JSON dict of all public `core/config.py` constants; loaded before `--set`, so `--set` can override values from the file)
+- Open config editor: `uv run wee-life2 --edit-config` (Textual TUI for editing and saving JSON presets; `wee-life2 --config-file my_config.json --edit-config` opens that file)
 - The old per-option flags (`--radioactive-damage`, `--lava-damage`, `--food-on-death-chance`, `--mating-rate`, `--asexual-cooldown-multiplier`) were removed in favor of the generic `--set`/`--get` system in `main.py` (`_apply_config_overrides`/`_print_config_values`)
 - In-simulation controls: `ESC` quit, `H` toggle help, `L` toggle legend, `SPACE` pause, `LMB` spawn, `RMB` remove, `R` spawn random organisms, `E` toggle map edit mode
 - In edit mode: `0-5` select tool, `LMB` draw, `RMB` erase, `S` save, `C` clear, `R` randomize, `E` exit, `ESC` quit
@@ -50,12 +52,13 @@
   - `uv run python -m unittest discover tests`
   - `SDL_VIDEODRIVER=dummy timeout 10 uv run wee-life2`
   - `SDL_VIDEODRIVER=dummy timeout 5 uv run wee-life2 --edit-map`
+  - Textual editor headless tests are in `tests/test_config_editor.py`; the editor can also be opened manually with `uv run wee-life2 --edit-config`
 
 ## Architecture
 
 - Uses `uv` for dependency management and virtual environment.
 - Entry point: `wee_life2/main.py`.
-- Pygame is the only external dependency.
+- External dependencies: Pygame (simulation/editor rendering), Textual (config editor TUI), textual-slider (sliders in the config editor).
 - Genes are registered in `wee_life2/genes/__init__.py:GENE_REGISTRY`.
 - Body parts are assembled from `BodyPartBlueprint` objects returned by each gene.
 - Simulation loop is in `wee_life2/simulation.py`.

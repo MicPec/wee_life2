@@ -169,6 +169,47 @@ current value(s) and exits without launching the simulation/editor.
 `--width` and `--height` remain separate CLI-only flags controlling the
 world size passed to `Simulation`/`MapEditor`.
 
+### Configuration files
+
+You can load a complete preset from a JSON file with `--config-file`, and still
+override individual values with `--set` afterward:
+
+```bash
+wee-life2 --config-file fast.json
+wee-life2 --config-file fast.json --set MATING_RATE=0.5 --get MATING_RATE
+```
+
+The JSON file is a flat dictionary containing every public constant from
+`core/config.py`.  Tuples (such as RGB colors) are stored as JSON lists and are
+converted back to tuples on load, e.g.:
+
+```json
+{
+  "MATING_RATE": 0.5,
+  "RADIATION_DAMAGE": 1.5,
+  "COLOR_BACKGROUND": [10, 10, 20],
+  "GENE_SPAWN_WEIGHTS": {
+    "asexual": 0.2,
+    "spike": 0.5
+  }
+}
+```
+
+Unknown keys or incompatible types in the JSON file are rejected with an error.
+
+A terminal-based configuration editor is available with `--edit-config`:
+
+```bash
+uv run wee-life2 --edit-config
+uv run wee-life2 --config-file fast.json --edit-config
+```
+
+The editor is a Textual TUI that organises settings into tabs (Window / rendering,
+World, Physics / organism, Colours, etc.). Numeric values use a slider next to a
+manual text input, so you can drag for quick tweaks or type an exact value.
+Colours show live RGB previews. The editor only writes JSON presets; it does **not**
+modify `core/config.py`.
+
 ### Window / rendering
 
 | Constant        | Default | Meaning                                                                                     |

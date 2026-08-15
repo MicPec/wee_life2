@@ -1,0 +1,110 @@
+{
+  "WINDOW_WIDTH": 1200,
+  "WINDOW_HEIGHT": 900,
+  "FPS": 60,
+  "GRAY_WITH_AGE": true,
+  "TILE_SIZE": 20,
+  "WORLD_WIDTH": 1200,
+  "WORLD_HEIGHT": 900,
+  "POPULATION_CAP": 0.1,
+  "SPECIES_CAP_FRACTION": 0.5,
+  "STATS_ENABLED": true,
+  "STATS_BASE_DIR": "data/runs",
+  "STATS_SAMPLE_INTERVAL": 60,
+  "STATS_CENSUS_INTERVAL": 300,
+  "MAX_SPEED": 1.992,
+  "FRICTION": 0.92,
+  "TURN_RATE": 0.299,
+  "COLLISION_PUSH": 0.483,
+  "MAX_ORGANISM_RADIUS": 19.98,
+  "AGE_SLOWDOWN_START": 0.8,
+  "AGE_SLOWDOWN_END_SPEED": 0.2,
+  "BASE_ENERGY": 159.84,
+  "ENERGY_GAIN_FROM_FOOD": 44.82,
+  "ENERGY_COST_MOVE": 0.0,
+  "ENERGY_COST_STAY": 0.008,
+  "ENERGY_COST_ATTACK": 4.995,
+  "ENERGY_COST_MATE": 19.98,
+  "ENERGY_TO_MATE": 34.965,
+  "MAX_GENES": 16,
+  "LIFESPAN_BASE": 6000,
+  "MATURITY_MIN_FRACTION": 0.15,
+  "BABY_SIZE_FRACTION": 0.4,
+  "ASEXUAL_MATURITY_MIN_FRACTION": 0.4,
+  "MATURITY_MAX_FRACTION": 0.8,
+  "MUTATION_RATE": 0.091,
+  "MUTATION_STRENGTH": 0.132,
+  "MUTATION_INSERTION_RATE": 0.0,
+  "MATING_RATE": 0.299,
+  "MATING_DIVERSITY": 0.483,
+  "MATING_DENSITY_RADIUS": 80,
+  "MATING_DENSITY_LIMIT": 3,
+  "MATING_DEATH_CHANCE": 0.05,
+  "ASEXUAL_COOLDOWN_RATE": 1.992,
+  "GENE_DEFAULT_SPAWN_WEIGHT": 0.99,
+  "GENE_SPAWN_WEIGHTS": {
+    "asexual": 0.4,
+    "spike": 0.7,
+    "cannibal": 0.4,
+    "pheromone": 1.5,
+    "eye": 1.5,
+    "scent": 1.8,
+    "leg": 1.3,
+    "memory": 1.2,
+    "metabolism": 1.8
+  },
+  "RADIATION_DAMAGE": 2.99,
+  "LAVA_DAMAGE": 9.99,
+  "HEAL_ENERGY": 1.992,
+  "FOOD_ON_DEATH_CHANCE": 0.75,
+  "WATER_SPEED_PENALTY": 0.246,
+  "WATER_DROWN_DAMAGE": 0.483,
+  "AMPHIBIOUS_LAND_DRAIN": 0.091,
+  "WATER_SIGHT_DISCOUNT": 0.25,
+  "TILE_EMPTY": 0,
+  "TILE_WALL": 1,
+  "TILE_RADIOACTIVE": 2,
+  "TILE_LAVA": 3,
+  "TILE_WATER": 4,
+  "TILE_HEAL": 5,
+  "COLOR_BACKGROUND": [
+    20,
+    20,
+    30
+  ],
+  "COLOR_WALL": [
+    80,
+    80,
+    90
+  ],
+  "COLOR_RADIOACTIVE": [
+    50,
+    160,
+    50
+  ],
+  "COLOR_LAVA": [
+    220,
+    60,
+    30
+  ],
+  "COLOR_WATER": [
+    40,
+    100,
+    190
+  ],
+  "COLOR_HEAL": [
+    210,
+    230,
+    240
+  ],
+  "COLOR_FOOD": [
+    120,
+    200,
+    80
+  ],
+  "COLOR_POISON": [
+    200,
+    60,
+    80
+  ]
+}

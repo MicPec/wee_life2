@@ -1,7 +1,7 @@
 [project]
 name = "wee-life2"
 version = "0.1.0"
-description = "Add your description here"
+description = "An artificial life simulation where evolving organisms with genetic traits compete, reproduce, and adapt in a customizable tile-based world."
 readme = "README.md"
 authors = [
     { name = "michal.pecyna@gmail.com", email = "michal.pecyna@gmail.com" }
@@ -9,6 +9,8 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "pygame>=2.6.1",
+    "textual>=8.2.8",
+    "textual-slider>=0.2.0",
 ]
 
 [project.scripts]
