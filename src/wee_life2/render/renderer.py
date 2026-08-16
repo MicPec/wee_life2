@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pygame
@@ -151,6 +153,18 @@ class Renderer:
             actions.append(SpawnRandomAction())
         elif not self.edit_mode and event.key == pygame.K_c:
             self.confirming_reset = True
+        elif event.key == pygame.K_p:
+            self._save_screenshot()
+
+    def _save_screenshot(self) -> None:
+        """Save the current screen to a timestamped PNG in data/screenshots."""
+        base = Path("data/screenshots")
+        base.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        suffix = f"{datetime.now().microsecond:04x}"
+        path = base / f"screenshot_{timestamp}_{suffix}.png"
+        pygame.image.save(self.screen, str(path))
+        print(f"Saved screenshot to {path}")
 
     def _handle_mouse_event(self, event: pygame.event.Event, world: World, actions: list[Action]) -> None:
         """Handle mouse button events for both edit and simulation modes."""
@@ -713,6 +727,7 @@ class Renderer:
             "  H        - toggle this help",
             "  G        - toggle age greying",
             "  T        - toggle top-5 species panel",
+            "  P        - take screenshot",
             "  E        - toggle map edit mode",
             "  ESC      - quit",
             "",

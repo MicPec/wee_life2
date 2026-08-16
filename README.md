@@ -2,6 +2,21 @@
 
 A Python/Pygame sandbox where units live on a board, are controlled by a genetic algorithm, and are built from DNA-coded body parts.
 
+## Table of contents
+
+- [Run](#run)
+- [Screenshot](#screenshot)
+- [Map editor](#map-editor)
+- [Sample maps](#sample-maps)
+- [Project structure](#project-structure)
+- [Gene system](#gene-system)
+- [Configuration](#configuration)
+- [DNA](#dna)
+- [Current gene set](#current-gene-set)
+- [AI / drives](#ai--drives)
+- [World features](#world-features)
+
+
 ## Run
 
 ```bash
@@ -9,6 +24,7 @@ uv run wee-life2
 ```
 
 Keyboard:
+
 - `ESC` — quit
 - `H` — toggle help / controls
 - `L` — toggle body-part / gene / terrain legend
@@ -19,10 +35,15 @@ Keyboard:
 - `E` — toggle map edit mode
 
 Mouse:
+
 - `LMB` on empty tile — spawn a random organism
 - `RMB` on organism — remove it
 
 While paused, hovering an organism shows its DNA/stats panel.
+
+## Screenshot
+
+![A populated simulation world showing water, walls, hazards, and the top-5 species panel](sim1.png)
 
 ## Map editor
 
@@ -34,6 +55,7 @@ uv run wee-life2 --edit-map
 ```
 
 Editor controls:
+
 - `LMB` — draw selected tile
 - `RMB` — erase (empty tile)
 - `0` — empty
@@ -73,7 +95,7 @@ uv run wee-life2 --map-file maps/maze.json
 
 ## Project structure
 
-```
+```text
 src/wee_life2/
 ├── main.py                 # CLI entry point
 ├── simulation.py           # World + renderer loop

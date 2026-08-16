@@ -140,6 +140,10 @@ class TileMap:
                     dx = (c + 0.5) * tile_size - x0
                     dy = (r + 0.5) * tile_size - y0
                     return (math.hypot(dx, dy), True)
+            else:
+                dx = (c + 0.5) * tile_size - x0
+                dy = (r + 0.5) * tile_size - y0
+                return (math.hypot(dx, dy), False)
             if c == c1 and r == r1:
                 break
             e2 = 2 * err
@@ -192,6 +196,8 @@ class TileMap:
                 tile = tiles[r][c]
                 if tile != self.TILE_EMPTY:
                     return ((c + 0.5) * tile_size, (r + 0.5) * tile_size), tile
+            else:
+                return ((c + 0.5) * tile_size, (r + 0.5) * tile_size), self.TILE_WALL
             if c == c1 and r == r1:
                 break
             e2 = 2 * err

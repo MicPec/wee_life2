@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .core import config
+from .core.config_json import config_to_dict
 
 if TYPE_CHECKING:
     from .core.organism import Organism
@@ -100,6 +101,7 @@ class RunLogger:
             "max_organisms": world.max_organisms,
             "sample_interval": self.sample_interval,
             "census_interval": self.census_interval,
+            "config": config_to_dict(),
         }
         with open(self._run_dir / "meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)
