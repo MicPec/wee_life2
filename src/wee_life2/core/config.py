@@ -67,8 +67,8 @@ GENE_SPAWN_WEIGHTS = {  # per-gene overrides; higher = more common
     "scent": 1.8,  # scent is a strong sense
     "leg": 1.3,  # needed for movement
     "memory": 1.2,  # long-term navigation; benefits from paired senses
-    # "jaw": 3.0,  # needed to eat
-    # "touch": 2.5,  # needed to avoid hazards
+    "jaw": 1.8,  # needed to eat
+    "touch": 1.7,  # needed to avoid hazards
     "metabolism": 1.8,  # needed for energy and longevity
 }
 

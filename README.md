@@ -31,6 +31,7 @@ Keyboard:
 - `G` — toggle age greying
 - `T` — toggle top-5 species panel
 - `SPACE` — pause / resume
+- `P` — save screenshot
 - `R` — spawn a few random organisms
 - `E` — toggle map edit mode
 
