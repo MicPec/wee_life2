@@ -99,9 +99,9 @@ TILE_HEAL = 5  # regenerative tile that slowly restores energy
 # Colors
 COLOR_BACKGROUND = (20, 20, 30)  # window background
 COLOR_WALL = (80, 80, 90)  # wall tiles
-COLOR_RADIOACTIVE = (50, 160, 50)  # radioactive hazard tiles
+COLOR_RADIOACTIVE = (160, 10, 160)  # radioactive hazard tiles (violet)
 COLOR_LAVA = (220, 60, 30)  # lava hazard tiles
 COLOR_WATER = (40, 100, 190)  # water tiles
-COLOR_HEAL = (210, 230, 240)  # regenerative heal tiles (off-white / light grey)
+COLOR_HEAL = (80, 200, 80)  # regenerative heal tiles (green)
 COLOR_FOOD = (120, 200, 80)  # edible food remains
 COLOR_POISON = (200, 60, 80)  # poisonous remains left by toxin_gland
