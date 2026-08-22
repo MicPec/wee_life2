@@ -14,6 +14,17 @@ else:
     TILE_RECT_SIZE = 10
 
 
+# Tiles whose color varies over time and must be redrawn each frame.
+ANIMATED_TILES = frozenset(
+    {
+        config.TILE_RADIOACTIVE,
+        config.TILE_LAVA,
+        config.TILE_WATER,
+        config.TILE_HEAL,
+    }
+)
+
+
 def tile_color(tile: int, time_ms: int | None = None) -> tuple[int, int, int]:
     """Return the display color for a tile, including pulse effects."""
     if time_ms is None:

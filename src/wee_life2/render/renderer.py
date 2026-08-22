@@ -22,7 +22,13 @@ from .actions import (
 )
 from .body_drawing import BODY_DRAWERS, DrawContext, draw_generic
 from .legend_drawing import draw_legend_icon
-from .tile_drawing import draw_grid, draw_tile_highlight, draw_tiles, tile_color
+from .tile_drawing import (
+    ANIMATED_TILES,
+    draw_grid,
+    draw_tile_highlight,
+    draw_tiles,
+    tile_color,
+)
 
 if TYPE_CHECKING:
     from ..core.world import World
@@ -77,6 +83,7 @@ class Renderer:
         self._eye_overlay: pygame.Surface | None = None
         self._eye_line_overlay: pygame.Surface | None = None
         self._map_surface: pygame.Surface | None = None
+        self._animated_tile_rects: dict[int, list[pygame.Rect]] = {}
         self.confirming_reset = False
 
     def clear_map_cache(self) -> None:
@@ -246,13 +253,29 @@ class Renderer:
             world.set_tile(col, row, tile)
             self.clear_map_cache()
 
-    def _tile_rect(self, col: int, row: int) -> pygame.Rect:
-        return pygame.Rect(
-            col * config.TILE_SIZE,
-            row * config.TILE_SIZE,
-            config.TILE_SIZE,
-            config.TILE_SIZE,
-        )
+    def _rebuild_animated_tile_rects(self, world: World) -> None:
+        """Precompute screen rectangles for tiles that need per-frame animation.
+
+        Runs of the same animated tile in a row are merged into one rectangle
+        so each frame needs fewer fill calls.
+        """
+        rects_by_tile: dict[int, list[pygame.Rect]] = {tile: [] for tile in ANIMATED_TILES}
+        tile_size = world.tile_size
+        for row in range(world.rows):
+            row_tiles = world.tiles[row]
+            col = 0
+            while col < world.cols:
+                tile = row_tiles[col]
+                start = col
+                while col < world.cols and row_tiles[col] == tile:
+                    col += 1
+                if tile in rects_by_tile:
+                    x = int(start * tile_size)
+                    y = int(row * tile_size)
+                    w = int(col * tile_size) - x
+                    h = int((row + 1) * tile_size) - y
+                    rects_by_tile[tile].append(pygame.Rect(x, y, w, h))
+        self._animated_tile_rects = rects_by_tile
 
     def _draw_tiles(self, world: World) -> None:
         if self.edit_mode:
@@ -264,22 +287,17 @@ class Renderer:
             self._map_surface = pygame.Surface((self.width, self.height))
             self._map_surface.fill(config.COLOR_BACKGROUND)
             draw_tiles(self._map_surface, world)
+            self._rebuild_animated_tile_rects(world)
         self.screen.blit(self._map_surface, (0, 0))
 
-        # Animate water tiles on top of the cached map.
+        # Animate pulsing tiles on top of the cached map.
         time_ms = pygame.time.get_ticks()
-        tile_size = world.tile_size
-        for row in range(world.rows):
-            row_tiles = world.tiles[row]
-            for col in range(world.cols):
-                if row_tiles[col] == config.TILE_WATER:
-                    rect = pygame.Rect(
-                        int(col * tile_size),
-                        int(row * tile_size),
-                        int(tile_size),
-                        int(tile_size),
-                    )
-                    pygame.draw.rect(self.screen, tile_color(config.TILE_WATER, time_ms), rect)
+        for tile, rects in self._animated_tile_rects.items():
+            if not rects:
+                continue
+            color = tile_color(tile, time_ms)
+            for rect in rects:
+                self.screen.fill(color, rect)
 
     def _draw_food(self, world: World) -> None:
         for food in world.food:
