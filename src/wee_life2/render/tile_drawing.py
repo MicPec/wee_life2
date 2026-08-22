@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Collection
 
 import pygame
 
@@ -61,8 +62,13 @@ def draw_tiles(
     world,
     border: bool = False,
     time_ms: int | None = None,
+    skip_tiles: Collection[int] = (),
 ) -> None:
-    """Draw all non-empty tiles; optionally draw a border around every tile."""
+    """Draw all non-empty tiles; optionally draw a border around every tile.
+
+    ``skip_tiles`` lists tile types that are not filled (useful when building
+    a static cache whose animated tiles are drawn separately each frame).
+    """
     if time_ms is None:
         time_ms = pygame.time.get_ticks()
 
@@ -75,7 +81,7 @@ def draw_tiles(
             if tile == config.TILE_EMPTY and not border:
                 continue
             rect = _tile_rect(col, row, tile_size)
-            if tile != config.TILE_EMPTY:
+            if tile != config.TILE_EMPTY and tile not in skip_tiles:
                 pygame.draw.rect(surface, tile_color(tile, time_ms), rect)
             if border:
                 pygame.draw.rect(surface, border_color, rect, 1)

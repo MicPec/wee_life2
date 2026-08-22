@@ -43,7 +43,7 @@
   - `Touch` uses a single combined ray cast against the tile grid instead of world-unit sampling.
   - `Scent` and `Eye` compute squared distances first and only run line-of-sight checks for targets that can beat the current best score.
   - `Organism` caches nearby organisms per tick and stores immutable genome-derived counts.
-  - `Renderer` caches the static map background and only redraws animated water tiles each frame.
+  - `Renderer` caches a fully static map background (animated tiles are excluded via `draw_tiles(skip_tiles=...)`) and only redraws pulsing tiles (`ANIMATED_TILES` in `render/tile_drawing.py`) each frame, using rectangles pre-merged horizontally and vertically in `Renderer._rebuild_animated_tile_rects` (tile layout is static between cache rebuilds). The map blit covers the whole screen, so `render()` skips the redundant screen-wide background fill.
   - Body parts are sorted once in `Organism._build_body` instead of every frame.
 - Repeatable performance smoke test:
   - `uv run python -m unittest tests.test_performance`

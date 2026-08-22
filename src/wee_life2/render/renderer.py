@@ -256,8 +256,11 @@ class Renderer:
     def _rebuild_animated_tile_rects(self, world: World) -> None:
         """Precompute screen rectangles for tiles that need per-frame animation.
 
-        Runs of the same animated tile in a row are merged into one rectangle
-        so each frame needs fewer fill calls.
+        Runs of the same animated tile in a row are merged into one rectangle,
+        and runs stacked in consecutive rows with the same x/width are merged
+        again, so each frame needs fewer fill calls. The tile layout is static
+        between map-cache rebuilds, so this greedy 2D merge only runs once per
+        map change.
         """
         rects_by_tile: dict[int, list[pygame.Rect]] = {tile: [] for tile in ANIMATED_TILES}
         tile_size = world.tile_size
@@ -275,18 +278,30 @@ class Renderer:
                     w = int(col * tile_size) - x
                     h = int((row + 1) * tile_size) - y
                     rects_by_tile[tile].append(pygame.Rect(x, y, w, h))
+        for tile, rects in rects_by_tile.items():
+            merged: list[pygame.Rect] = []
+            for rect in sorted(rects, key=lambda r: (r.x, r.width, r.y)):
+                last = merged[-1] if merged else None
+                if last is not None and last.x == rect.x and last.width == rect.width and last.bottom == rect.y:
+                    last.height += rect.height
+                else:
+                    merged.append(rect)
+            rects_by_tile[tile] = merged
         self._animated_tile_rects = rects_by_tile
 
     def _draw_tiles(self, world: World) -> None:
         if self.edit_mode:
             self._map_surface = None
+            self.screen.fill(config.COLOR_BACKGROUND)
             draw_tiles(self.screen, world)
             return
 
         if self._map_surface is None:
             self._map_surface = pygame.Surface((self.width, self.height))
             self._map_surface.fill(config.COLOR_BACKGROUND)
-            draw_tiles(self._map_surface, world)
+            # The cached map is fully static: animated tiles are left out and
+            # only drawn by the per-frame overlay below.
+            draw_tiles(self._map_surface, world, skip_tiles=ANIMATED_TILES)
             self._rebuild_animated_tile_rects(world)
         self.screen.blit(self._map_surface, (0, 0))
 
@@ -813,7 +828,8 @@ class Renderer:
             draw_tile_highlight(self.screen, col, row, world.tile_size)
 
     def render(self, world: World) -> None:
-        self.screen.fill(config.COLOR_BACKGROUND)
+        # No screen-wide background fill needed here: _draw_tiles either blits
+        # the full-screen cached map or (in edit mode) fills the screen itself.
         self._draw_tiles(world)
         self._draw_food(world)
         if not self.edit_mode and self.show_species:
