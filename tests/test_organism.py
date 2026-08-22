@@ -88,6 +88,7 @@ class TestOrganism(unittest.TestCase):
         child = a.mate(b)
         self.assertIsNotNone(child)
         self.assertIsInstance(child.dna, DNA)
+        self.assertEqual(child.generation, max(a.generation, b.generation) + 1)
 
     def test_water_penalty(self):
         # Ensure we use a non-amphibious DNA sample.

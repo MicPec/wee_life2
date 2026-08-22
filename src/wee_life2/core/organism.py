@@ -62,7 +62,7 @@ class BodyPart:
 class Organism:
     """A living unit on the board."""
 
-    def __init__(self, dna: DNA, position: tuple[float, float] | None = None) -> None:
+    def __init__(self, dna: DNA, position: tuple[float, float] | None = None, generation: int = 1) -> None:
         self.dna = dna
         self.position: tuple[float, float] = position or (0.0, 0.0)
         self.velocity: tuple[float, float] = (0.0, 0.0)
@@ -70,6 +70,7 @@ class Organism:
         self.energy: float = config.BASE_ENERGY
         self.max_energy: float = config.BASE_ENERGY * 1.5
         self.age: float = 0.0
+        self.generation: int = generation
         self.base_lifespan: float = config.LIFESPAN_BASE
         self.lifespan: float = config.LIFESPAN_BASE
         self.is_dead: bool = False
@@ -484,7 +485,11 @@ class Organism:
         # Position near parents
         x = (self.position[0] + partner.position[0]) / 2
         y = (self.position[1] + partner.position[1]) / 2
-        child = Organism(child_dna, (x, y))
+        child = Organism(
+            child_dna,
+            (x, y),
+            generation=max(self.generation, partner.generation) + 1,
+        )
 
         # Reproduction costs
         self.energy -= config.ENERGY_COST_MATE
@@ -493,4 +498,4 @@ class Organism:
         return child
 
     def __repr__(self) -> str:
-        return f"Organism(age={self.age:.0f}, energy={self.energy:.1f}, dna={self.dna})"
+        return f"Organism(gen={self.generation}, age={self.age:.0f}, energy={self.energy:.1f}, dna={self.dna})"

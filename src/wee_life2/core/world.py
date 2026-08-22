@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import config
 from .dna import DNA
@@ -191,9 +191,16 @@ class World:
             pos = self.random_empty_position(in_water=is_amphibious)
             self.spawn_organism(dna, pos)
 
-    def spawn_child_from_dna(self, dna: DNA, position: tuple[float, float]) -> Organism | None:
-        """Create an organism from DNA, place it and record the birth if successful."""
-        organism = Organism(dna, position)
+    def spawn_child_from_dna(
+        self, dna: DNA, position: tuple[float, float], parent: Organism | None = None
+    ) -> Organism | None:
+        """Create an organism from DNA, place it and record the birth if successful.
+
+        If ``parent`` is given, the child's generation is set to
+        ``parent.generation + 1``; otherwise it defaults to ``1``.
+        """
+        generation = parent.generation + 1 if parent is not None else 1
+        organism = Organism(dna, position, generation=generation)
         organism.position = self.tile_map.push_out_of_walls(organism.position, organism.radius)
         if self.add_organism(organism):
             self.record_birth(organism)
@@ -382,14 +389,20 @@ class World:
         if species:
             self.deaths_by_species[species] = self.deaths_by_species.get(species, 0) + 1
 
-    def stats(self) -> dict[str, int]:
+    def stats(self) -> dict[str, Any]:
+        organisms = [o for o in self.organisms if not o.is_dead]
+        total = len(organisms)
+        max_generation = max((o.generation for o in organisms), default=0)
+        min_generation = min((o.generation for o in organisms), default=0)
         result = {
-            "organisms": len(self.organisms),
+            "organisms": total,
             "food": len(self.food),
             "births": self.births,
             "walls": sum(row.count(self.TILE_WALL) for row in self.tiles),
             "hazards": sum(row.count(self.TILE_RADIOACTIVE) + row.count(self.TILE_LAVA) for row in self.tiles),
             "tick": int(self.tick),
+            "max_generation": max_generation,
+            "min_generation": min_generation,
         }
         result.update(self.deaths)
         return result

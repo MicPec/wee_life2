@@ -83,7 +83,7 @@ class AsexualGene(Gene):
 
         offset = (random.uniform(-12, 12), random.uniform(-12, 12))
         pos = (organism.position[0] + offset[0], organism.position[1] + offset[1])
-        child = world.spawn_child_from_dna(child_dna, pos)
+        child = world.spawn_child_from_dna(child_dna, pos, parent=organism)
 
         if child is None:
             return
@@ -91,12 +91,11 @@ class AsexualGene(Gene):
         organism.energy -= cost
 
         # Match the sexual reproduction death-on-birth risk: sometimes asexual
-        # cloning fails catastrophically and the mother dies instead of leaving
-        # viable offspring. The mother must pay the cost before knowing the
-        # outcome, and no child is added to the world on failure.
+        # cloning fails catastrophically and the mother dies, while the child
+        # is already in the world. The mother pays the cost before this roll.
         if random.random() < config.MATING_DEATH_CHANCE:
             organism.die(world, cause="asexual_failure")
             return
 
-        world.record_birth(child)
+        # spawn_child_from_dna already records the birth; just reset the timer.
         self._timer = self._effective_cooldown()

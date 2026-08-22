@@ -4,17 +4,33 @@ A Python/Pygame sandbox where units live on a board, are controlled by a genetic
 
 ## Table of contents
 
-- [Run](#run)
-- [Screenshot](#screenshot)
-- [Map editor](#map-editor)
-- [Sample maps](#sample-maps)
-- [Project structure](#project-structure)
-- [Gene system](#gene-system)
-- [Configuration](#configuration)
-- [DNA](#dna)
-- [Current gene set](#current-gene-set)
-- [AI / drives](#ai--drives)
-- [World features](#world-features)
+- [Wee Life 2 — Artificial Life Simulation](#wee-life-2--artificial-life-simulation)
+  - [Table of contents](#table-of-contents)
+  - [Run](#run)
+  - [Statistics output](#statistics-output)
+  - [Screenshot](#screenshot)
+  - [Map editor](#map-editor)
+  - [Sample maps](#sample-maps)
+  - [Project structure](#project-structure)
+  - [Gene system](#gene-system)
+  - [Configuration](#configuration)
+    - [Configuration files](#configuration-files)
+    - [Window / rendering](#window--rendering)
+    - [World](#world)
+    - [Physics / organism](#physics--organism)
+    - [Energy](#energy)
+    - [Lifespan / reproduction](#lifespan--reproduction)
+    - [Random spawn weighting](#random-spawn-weighting)
+    - [Death / remains](#death--remains)
+    - [Hazards](#hazards)
+    - [Water](#water)
+    - [Tiles](#tiles)
+    - [Colors](#colors)
+  - [DNA](#dna)
+    - [Gene parameters](#gene-parameters)
+  - [Current gene set](#current-gene-set)
+  - [AI / drives](#ai--drives)
+  - [World features](#world-features)
 
 
 ## Run
@@ -40,7 +56,21 @@ Mouse:
 - `LMB` on empty tile — spawn a random organism
 - `RMB` on organism — remove it
 
-While paused, hovering an organism shows its DNA/stats panel.
+While paused, hovering an organism shows its DNA/stats panel, and its `generation` number.
+
+The top-left overlay shows the simulation `tick` (wall-clock ticks at `FPS`), plus the current `max gen` and `min gen` of the living population. `generation` is the biological generation of an organism: `1` for the initial/random spawn, `parent + 1` for asexual clones, and `max(parent1, parent2) + 1` for sexual offspring.
+
+## Statistics output
+
+Each run writes a timestamped directory under `data/runs/` (configurable via `config.STATS_BASE_DIR` or disabled with `--no-stats`):
+
+- `timeseries.csv` — population-level metrics sampled every `config.STATS_SAMPLE_INTERVAL` ticks. Columns include `tick`, `organisms`, `food`, `births`, `deaths`, `species_count`, `diversity`, `avg_energy`, `avg_age`, `max_generation`, `min_generation`, and `top_5`.
+- `events.jsonl` — birth/death/speciation/extinction events.
+- `census.jsonl` — per-species snapshots every `config.STATS_CENSUS_INTERVAL` ticks, including `count`, `pct`, `avg_energy`, `avg_age`, `min_generation`, and `max_generation`.
+- `organisms.jsonl` — one record per created organism, including `uid`, `name`, `generation`, position, angle, radius, and full `dna`.
+- `meta.json` and `map.json` — run metadata and the tile map.
+
+`generation` lets you compare how fast different species are producing new biological generations, independent of the wall-clock tick count.
 
 ## Screenshot
 

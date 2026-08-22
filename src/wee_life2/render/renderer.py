@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pygame
 
@@ -427,6 +427,7 @@ class Renderer:
             getattr(organism, "name", "unknown").upper(),
             f"energy: {organism.energy:.0f}/{organism.max_energy:.0f}",
             f"age: {organism.age:.0f}/{organism.lifespan:.0f}",
+            f"generation: {organism.generation}",
             f"aggression: {organism.aggression:.2f}  armor: {organism.armor_value:.2f}",
             f"toxin res.: {organism.toxin_resistance:.2f}  glow: {organism.bioluminescence:.2f}",
             f"genes: {len(organism.dna.genes)}",
@@ -604,12 +605,13 @@ class Renderer:
                 return self.LEGEND[idx][0]
         return None
 
-    def _draw_ui(self, stats: dict[str, int]) -> None:
+    def _draw_ui(self, stats: dict[str, Any]) -> None:
         lines = [
-            f"gen: {stats.get('tick', 0)}",
+            f"tick: {stats.get('tick', 0)}",
             f"organisms: {stats['organisms']}",
             f"food: {stats['food']} births: {stats.get('births', 0)}",
             f"deaths: {stats.get('combat', 0) + stats.get('starvation', 0) + stats.get('age', 0) + stats.get('venom', 0)}",
+            f"max gen: {stats.get('max_generation', 0)}  min gen: {stats.get('min_generation', 0)}",
             f"walls: {stats['walls']} hazards: {stats['hazards']}",
         ]
         if self.edit_mode:

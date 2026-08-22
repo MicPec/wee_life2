@@ -84,6 +84,8 @@ class RunLogger:
                 "diversity",
                 "avg_energy",
                 "avg_age",
+                "max_generation",
+                "min_generation",
                 "top_5",
             ],
         )
@@ -157,10 +159,15 @@ class RunLogger:
         counts: dict[str, int] = {}
         total_energy = 0.0
         total_age = 0.0
+        max_generation = 0
+        min_generation = 0
         for o in organisms:
             counts[o.name] = counts.get(o.name, 0) + 1
             total_energy += o.energy
             total_age += o.age
+            max_generation = max(max_generation, o.generation)
+            if min_generation == 0 or o.generation < min_generation:
+                min_generation = o.generation
 
         total = len(organisms)
         species_count = len(counts)
@@ -188,6 +195,8 @@ class RunLogger:
                 "diversity": round(diversity, 4),
                 "avg_energy": round(avg_energy, 2),
                 "avg_age": round(avg_age, 2),
+                "max_generation": max_generation,
+                "min_generation": min_generation,
                 "top_5": json.dumps(top_5, ensure_ascii=False),
             }
         )
@@ -269,11 +278,17 @@ class RunLogger:
         counts: dict[str, int] = {}
         energy_by_species: dict[str, float] = {}
         age_by_species: dict[str, float] = {}
+        min_generation_by_species: dict[str, int] = {}
+        max_generation_by_species: dict[str, int] = {}
         for o in organisms:
             name = o.name
             counts[name] = counts.get(name, 0) + 1
             energy_by_species[name] = energy_by_species.get(name, 0.0) + o.energy
             age_by_species[name] = age_by_species.get(name, 0.0) + o.age
+            current_min = min_generation_by_species.get(name, 0)
+            if current_min == 0 or o.generation < current_min:
+                min_generation_by_species[name] = o.generation
+            max_generation_by_species[name] = max(max_generation_by_species.get(name, 0), o.generation)
 
         total = len(organisms)
         if not total:
@@ -288,6 +303,8 @@ class RunLogger:
                 "pct": round(count / total, 4),
                 "avg_energy": round(energy_by_species[name] / count, 2),
                 "avg_age": round(age_by_species[name] / count, 2),
+                "min_generation": min_generation_by_species[name],
+                "max_generation": max_generation_by_species[name],
             }
             self._census_file.write(json.dumps(record, ensure_ascii=False) + "\n")
         self._census_file.flush()
@@ -304,6 +321,7 @@ class RunLogger:
         record = {
             "uid": getattr(organism, "_uid", None),
             "name": organism.name,
+            "generation": organism.generation,
             "x": round(organism.position[0], 2),
             "y": round(organism.position[1], 2),
             "angle": round(organism.angle, 4),
@@ -334,6 +352,7 @@ class RunLogger:
             + "\n"
         )
         self._events_file.flush()
+        self._prev_births = world.births
         self._prev_total_deaths = sum(world.deaths.values())
         self._prev_births_by_species = dict(world.births_by_species)
         self._prev_deaths_by_species = dict(world.deaths_by_species)

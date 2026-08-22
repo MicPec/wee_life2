@@ -74,6 +74,7 @@ class TestWorld(unittest.TestCase):
         child = self.world.spawn_child_from_dna(dna, (50.0, 50.0))
         self.assertIsNotNone(child)
         self.assertIn(child, self.world.organisms)
+        self.assertEqual(child.generation, 1)
         self.assertEqual(self.world.births, 1)
 
     def test_record_birth_and_death(self):
@@ -103,6 +104,8 @@ class TestWorld(unittest.TestCase):
         self.assertIn("organisms", stats)
         self.assertIn("food", stats)
         self.assertIn("tick", stats)
+        self.assertIn("max_generation", stats)
+        self.assertIn("min_generation", stats)
 
 
 if __name__ == "__main__":
