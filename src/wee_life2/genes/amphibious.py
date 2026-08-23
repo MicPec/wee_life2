@@ -26,14 +26,14 @@ class AmphibiousGene(Gene):
 
     kind = "amphibious"
     default_params = {
-        "size": 4.0,
+        "size": 7.0,
     }
 
     def body_parts(self, base_color):
         return [
             BodyPartBlueprint(
                 kind="amphibious",
-                offset=(0, -7),
+                offset=(0, -10),
                 size=self.params["size"],
                 color=(70, 190, 210),
                 params={},

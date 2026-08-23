@@ -36,14 +36,15 @@ def _draw_legend_eye(surface, x, y, size, color):
 
 
 def _draw_legend_pincer(surface, x, y, size, color):
+    """Two thick claw lines in a V opening downward — crab pincers."""
     cx = x + size // 2
-    p1 = (cx, y + 2)
-    p2 = (x + 2, y + size - 2)
-    p3 = (cx, y + size // 2)
-    p4 = (x + size - 2, y + size - 2)
-    pts = [p1, p2, p3, p4]
-    pygame.draw.polygon(surface, color, pts)
-    pygame.draw.polygon(surface, (100, 60, 50), pts, 1)
+    w = max(2, size // 4)
+    spread = size // 3
+    base = (cx, y + 2)
+    for side in (-1, 1):
+        tip = (cx + side * spread, y + size - 2)
+        pygame.draw.line(surface, color, base, tip, w)
+        pygame.draw.circle(surface, color, tip, w // 2)
 
 
 def _draw_legend_limb(surface, x, y, size, color):
@@ -104,31 +105,40 @@ def _draw_legend_cross(surface, x, y, size, color):
     pygame.draw.polygon(surface, (40, 120, 80), pts, 1)
 
 
-def _draw_legend_bolt(surface, x, y, size, color):
-    cx, cy = x + size // 2, y + size // 2
-    pts = [
-        (cx - 2, y + 2),
-        (cx + size // 4, cy),
-        (cx - size // 4, cy),
-        (cx + 2, y + size - 2),
-    ]
-    pygame.draw.polygon(surface, color, pts)
-
-
-def _draw_legend_whiskers(surface, x, y, size, color):
+def _draw_legend_exclamation(surface, x, y, size, color):
+    """Exclamation mark — alarm state."""
     cx = x + size // 2
-    for offset in (-1, 0, 1):
-        start = (cx + offset * (size // 4), y + size - 3)
-        end = (cx + offset * (size // 2), y + 3)
-        pygame.draw.line(surface, color, start, end, 1)
+    bar_w = max(3, size // 4)
+    bar_h = int(size * 0.55)
+    bar_rect = (cx - bar_w // 2, y + 2, bar_w, bar_h)
+    pygame.draw.rect(surface, color, bar_rect, border_radius=bar_w // 2)
+    pygame.draw.circle(surface, color, (cx, y + size - 3), max(2, size // 5))
 
 
-def _draw_legend_flag(surface, x, y, size, color):
+def _draw_legend_sonar(surface, x, y, size, color):
+    """Sonar — two bold arcs radiating upward (proximity sense)."""
+    cx = x + size // 2
+    cy = y + size - 2
+    span = 1.8
+    steps = 8
+    for frac in (0.5, 0.85):
+        r = (size - 2) * frac
+        pts = []
+        for i in range(steps + 1):
+            t = -math.pi / 2 - span / 2 + span * i / steps
+            pts.append((cx + int(math.cos(t) * r), cy + int(math.sin(t) * r)))
+        if len(pts) >= 2:
+            pygame.draw.lines(surface, color, False, pts, 2)
+
+
+def _draw_legend_cluster(surface, x, y, size, color):
+    """Three dots in a cluster — herd / group attraction."""
     cx, cy = x + size // 2, y + size // 2
-    pole_top = (cx, y + 2)
-    pygame.draw.line(surface, color, (cx, y + size - 2), pole_top, 2)
-    pts = [pole_top, (x + size - 2, y + 2 + size // 4), (x + size - 2, y + size // 2), (cx, cy)]
-    pygame.draw.polygon(surface, color, pts)
+    r = max(2, size // 5)
+    for ang_offset in (0, 2 * math.pi / 3, 4 * math.pi / 3):
+        dx = int(math.cos(ang_offset - math.pi / 2) * size * 0.25)
+        dy = int(math.sin(ang_offset - math.pi / 2) * size * 0.25)
+        pygame.draw.circle(surface, color, (cx + dx, cy + dy), r)
 
 
 def _draw_legend_shield(surface, x, y, size, color):
@@ -168,56 +178,48 @@ def _draw_legend_hexagon(surface, x, y, size, color):
     pygame.draw.circle(surface, (90, 30, 120), (cx, cy), max(1, r // 2))
 
 
-def _draw_legend_tadpole(surface, x, y, size, color):
+def _draw_legend_ring(surface, x, y, size, color):
+    """Hollow blue ring (amphibious)."""
     cx, cy = x + size // 2, y + size // 2
     r = size // 2 - 1
-    pygame.draw.circle(surface, color, (cx, cy), r - 1)
-    tip = (cx, y + 2)
-    left = (x + 2, y + size - 4)
-    right = (x + size - 2, y + size - 4)
-    pygame.draw.polygon(surface, color, [tip, left, right])
-    pygame.draw.circle(surface, (20, 90, 110), (cx, cy), r - 1, 1)
+    pygame.draw.circle(surface, color, (cx, cy), r, 2)
+    pygame.draw.circle(surface, (20, 90, 110), (cx, cy), r, 1)
 
 
-def _draw_legend_fangs(surface, x, y, size, color):
-    cx = x + size // 2
-    base = (cx, y + size - 2)
-    base_l = (cx - size // 3, y + size // 2)
-    tip_l = (cx - 2, y + 2)
-    tip_r = (cx + 2, y + 2)
-    base_r = (cx + size // 3, y + size // 2)
-    pts = [base, base_l, tip_l, tip_r, base_r]
-    pygame.draw.polygon(surface, color, pts)
-    pygame.draw.polygon(surface, (40, 100, 40), pts, 1)
-
-
-def _draw_legend_bud(surface, x, y, size, color):
+def _draw_legend_drop(surface, x, y, size, color):
+    """Crossed bones (X) — universal poison/death symbol."""
     cx, cy = x + size // 2, y + size // 2
-    r = size // 2 - 1
-    # Arrow-shaped body pointing right, with a small bud behind.
-    tip = (cx + r, cy)
-    base_l = (cx - r // 2, cy - r)
-    base_r = (cx - r // 2, cy + r)
-    pts = [tip, base_l, base_r]
-    pygame.draw.polygon(surface, color, pts)
-    pygame.draw.polygon(surface, (120, 140, 60), pts, 1)
-    bud_x = cx - r // 2
-    bud_y = cy
-    pygame.draw.circle(surface, color, (bud_x, bud_y), max(1, r // 3))
+    d = size // 2 - 1
+    tip_r = max(2, size // 5)
+    pygame.draw.line(surface, color, (cx - d, cy - d), (cx + d, cy + d), 2)
+    pygame.draw.line(surface, color, (cx - d, cy + d), (cx + d, cy - d), 2)
+    for px, py in ((cx - d, cy - d), (cx + d, cy + d), (cx - d, cy + d), (cx + d, cy - d)):
+        pygame.draw.circle(surface, color, (px, py), tip_r)
+
+
+def _draw_legend_mitosis(surface, x, y, size, color):
+    """Mitosis — two touching circles (cell division)."""
+    cy = y + size // 2
+    r = max(2, (size - 4) // 3)
+    gap = max(1, r // 3)
+    cx1 = x + size // 2 - r + gap // 2
+    cx2 = x + size // 2 + r - gap // 2
+    pygame.draw.circle(surface, color, (cx1, cy), r)
+    pygame.draw.circle(surface, color, (cx2, cy), r)
+    pygame.draw.circle(surface, (120, 140, 60), (cx1, cy), r, 1)
+    pygame.draw.circle(surface, (120, 140, 60), (cx2, cy), r, 1)
+    pygame.draw.line(surface, (120, 140, 60), (x + size // 2, cy - r // 2), (x + size // 2, cy + r // 2), 1)
 
 
 def _draw_legend_maw(surface, x, y, size, color):
-    cx, cy = x + size // 2, y + size // 2
+    """Single downward fang — predator's bite."""
+    cx = x + size // 2
     r = size // 2 - 1
-    pygame.draw.circle(surface, color, (cx, cy), r)
-    mouth = [
-        (cx - size // 3, cy + 2),
-        (cx - size // 5, y + size - 3),
-        (cx, cy + size // 3),
-        (cx + size // 5, y + size - 3),
-        (cx + size // 3, cy + 2),
-    ]
-    pygame.draw.polygon(surface, (20, 20, 30), mouth)
+    tip = (cx, y + size - 2)
+    base_l = (cx - r, y + 2)
+    base_r = (cx + r, y + 2)
+    pygame.draw.polygon(surface, color, [base_l, base_r, tip])
+    pygame.draw.polygon(surface, (20, 20, 30), [base_l, base_r, tip], 1)
 
 
 def _draw_legend_generic(surface, x, y, size, color):
@@ -249,15 +251,15 @@ LEGEND_DRAWERS: dict[Kind, type] = {
     "antenna": _draw_legend_antenna,
     "ellipse": _draw_legend_ellipse,
     "cross": _draw_legend_cross,
-    "bolt": _draw_legend_bolt,
-    "whiskers": _draw_legend_whiskers,
-    "flag": _draw_legend_flag,
+    "exclamation": _draw_legend_exclamation,
+    "sonar": _draw_legend_sonar,
+    "cluster": _draw_legend_cluster,
     "shield": _draw_legend_shield,
     "diamond": _draw_legend_diamond,
     "hexagon": _draw_legend_hexagon,
-    "tadpole": _draw_legend_tadpole,
-    "fangs": _draw_legend_fangs,
-    "bud": _draw_legend_bud,
+    "ring": _draw_legend_ring,
+    "drop": _draw_legend_drop,
+    "mitosis": _draw_legend_mitosis,
     "maw": _draw_legend_maw,
     "memory": _draw_legend_memory,
 }

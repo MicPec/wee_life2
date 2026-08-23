@@ -75,16 +75,14 @@ def draw_eye(ctx: DrawContext) -> None:
 
 
 def draw_jaw(ctx: DrawContext) -> None:
-    """Pincer / open jaw."""
+    """Two thick claw lines in a V opening forward — crab pincers."""
     x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
-    base = (x, y)
-    outer_l = (x + int(math.cos(a - 0.45) * s), y + int(math.sin(a - 0.45) * s))
-    outer_r = (x + int(math.cos(a + 0.45) * s), y + int(math.sin(a + 0.45) * s))
-    inner_l = (x + int(math.cos(a - 0.08) * s * 0.55), y + int(math.sin(a - 0.08) * s * 0.55))
-    inner_r = (x + int(math.cos(a + 0.08) * s * 0.55), y + int(math.sin(a + 0.08) * s * 0.55))
-    pts = [base, outer_l, inner_l, inner_r, outer_r]
-    pygame.draw.polygon(ctx.surface, ctx.color, pts)
-    pygame.draw.polygon(ctx.surface, (100, 60, 50), pts, ctx.thickness or 1)
+    w = max(2, s // 2)
+    spread = 0.45
+    for side in (-1, 1):
+        tip = (x + int(math.cos(a + side * spread) * s), y + int(math.sin(a + side * spread) * s))
+        pygame.draw.line(ctx.surface, ctx.color, (x, y), tip, w)
+        pygame.draw.circle(ctx.surface, ctx.color, tip, w // 2)
 
 
 def draw_spike(ctx: DrawContext) -> None:
@@ -100,30 +98,35 @@ def draw_spike(ctx: DrawContext) -> None:
 
 
 def draw_scent(ctx: DrawContext) -> None:
-    """Antenna with a bulb tip."""
+    """Antenna with a hollow bulb tip (ring) — distinct from touch's sonar arcs."""
     x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
     tip = (x + int(math.cos(a) * s * 2.5), y + int(math.sin(a) * s * 2.5))
     pygame.draw.line(ctx.surface, ctx.color, (x, y), tip, ctx.thickness or 2)
-    pygame.draw.circle(ctx.surface, ctx.color, tip, max(1, s // 2))
+    pygame.draw.circle(ctx.surface, ctx.color, tip, max(2, s // 2), max(1, s // 4))
 
 
 def draw_pheromone(ctx: DrawContext) -> None:
-    """Diamond with pink outline."""
-    x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
-    front = s * 1.1
-    side = s * 0.6
-    p1 = (x + int(math.cos(a) * front), y + int(math.sin(a) * front))
-    p2 = (x + int(math.cos(a + math.pi / 2) * side), y + int(math.sin(a + math.pi / 2) * side))
-    p3 = (x + int(math.cos(a + math.pi) * front), y + int(math.sin(a + math.pi) * front))
-    p4 = (x + int(math.cos(a - math.pi / 2) * side), y + int(math.sin(a - math.pi / 2) * side))
-    pygame.draw.polygon(ctx.surface, ctx.color, [p1, p2, p3, p4])
-    pygame.draw.polygon(ctx.surface, (255, 150, 220), [p1, p2, p3, p4], ctx.thickness or 1)
+    """Concentric broadcast rings (mating signal radiating outward)."""
+    x, y, s = ctx.x, ctx.y, ctx.size
+    for i, frac in enumerate((1.0, 0.65, 0.3)):
+        r = max(1, int(s * frac))
+        # Fade outer rings by drawing them thinner.
+        width = 1 if i == 0 else 2
+        pygame.draw.circle(ctx.surface, ctx.color, (x, y), r, width)
+    pygame.draw.circle(ctx.surface, (255, 150, 220), (x, y), max(1, s), 1)
 
 
 def draw_fat(ctx: DrawContext) -> None:
-    """Energy-storage ellipse."""
+    """Barrel / cask — energy storage magazine."""
     s = ctx.size
-    pygame.draw.ellipse(ctx.surface, ctx.color, (ctx.x - s, ctx.y - s // 2, s * 2, s))
+    x, y = ctx.x, ctx.y
+    rect = (x - s, y - s // 2, s * 2, s)
+    pygame.draw.ellipse(ctx.surface, ctx.color, rect)
+    pygame.draw.ellipse(ctx.surface, _outline_color(ctx.color, 40), rect, 1)
+    # Two hoops to read as a barrel.
+    pygame.draw.line(ctx.surface, _outline_color(ctx.color, 40), (x - s // 3, y - s // 2), (x - s // 3, y + s // 2), 1)
+    pygame.draw.line(ctx.surface, _outline_color(ctx.color, 40), (x + s // 3, y - s // 2), (x + s // 3, y + s // 2), 1)
+    pygame.draw.line(ctx.surface, _outline_color(ctx.color, 40), (x - s, y), (x + s, y), 1)
 
 
 def draw_regeneration(ctx: DrawContext) -> None:
@@ -150,46 +153,46 @@ def draw_regeneration(ctx: DrawContext) -> None:
 
 
 def draw_fear(ctx: DrawContext) -> None:
-    """Lightning bolt."""
-    x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
-    pts = [
-        (x + int(math.cos(a - 0.2) * s * 0.3), y + int(math.sin(a - 0.2) * s * 0.3)),
-        (x + int(math.cos(a + 0.5) * s * 0.15), y + int(math.sin(a + 0.5) * s * 0.15)),
-        (x + int(math.cos(a) * s * 0.05), y + int(math.sin(a) * s * 0.05)),
-        (x + int(math.cos(a + 0.75) * s * 0.7), y + int(math.sin(a + 0.75) * s * 0.7)),
-        (x + int(math.cos(a) * s * 1.4), y + int(math.sin(a) * s * 1.4)),
-    ]
-    pygame.draw.polygon(ctx.surface, ctx.color, pts)
+    """Exclamation mark — alarm state."""
+    x, y, s = ctx.x, ctx.y, ctx.size
+    bar_w = max(2, int(s * 0.55))
+    bar_h = int(s * 1.3)
+    bar_rect = (x - bar_w // 2, y - bar_h, bar_w, bar_h)
+    pygame.draw.rect(ctx.surface, ctx.color, bar_rect, border_radius=bar_w // 2)
+    pygame.draw.circle(ctx.surface, ctx.color, (x, y + s // 2 + 1), max(2, int(s * 0.4)))
 
 
 def draw_touch(ctx: DrawContext) -> None:
-    """Three whiskers fanned out."""
+    """Sonar — two bold arcs radiating forward (proximity sense)."""
     x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
-    for offset in (-0.3, 0.0, 0.3):
-        tip = (x + int(math.cos(a + offset) * s * 2.8), y + int(math.sin(a + offset) * s * 2.8))
-        pygame.draw.line(ctx.surface, ctx.color, (x, y), tip, ctx.thickness or 1)
+    span = 1.8
+    steps = 7
+    w = max(2, s // 2)
+    for frac in (1.0, 1.7):
+        r = s * frac
+        pts = []
+        for i in range(steps + 1):
+            t = -span / 2 + span * i / steps
+            pts.append((x + int(math.cos(a + t) * r), y + int(math.sin(a + t) * r)))
+        if len(pts) >= 2:
+            pygame.draw.lines(ctx.surface, ctx.color, False, pts, w)
 
 
 def draw_herd(ctx: DrawContext) -> None:
-    """Flag / banner on a pole."""
+    """Three dots in a cluster — herd / group attraction."""
     x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
-    pole_tip = (x + int(math.cos(a) * s * 1.8), y + int(math.sin(a) * s * 1.8))
-    pygame.draw.line(ctx.surface, ctx.color, (x, y), pole_tip, ctx.thickness or 2)
-    flag_tip = (x + int(math.cos(a) * s * 2.6), y + int(math.sin(a) * s * 2.6))
-    flag_top = (x + int(math.cos(a + 0.8) * s * 0.7), y + int(math.sin(a + 0.8) * s * 0.7))
-    flag_bot = (x + int(math.cos(a - 0.4) * s * 0.7), y + int(math.sin(a - 0.4) * s * 0.7))
-    pygame.draw.polygon(ctx.surface, ctx.color, [pole_tip, flag_top, flag_tip, flag_bot])
+    r = max(2, s // 2)
+    for ang_offset in (0, 2 * math.pi / 3, 4 * math.pi / 3):
+        dx = int(math.cos(a + ang_offset) * s * 0.7)
+        dy = int(math.sin(a + ang_offset) * s * 0.7)
+        pygame.draw.circle(ctx.surface, ctx.color, (x + dx, y + dy), r)
 
 
 def draw_amphibious(ctx: DrawContext) -> None:
-    """Tadpole shape."""
-    x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
-    pygame.draw.circle(ctx.surface, ctx.color, (x, y), s)
-    tail = (x + int(math.cos(a) * s * 1.5), y + int(math.sin(a) * s * 1.5))
-    tail_l = (x + int(math.cos(a + 0.5) * s * 0.7), y + int(math.sin(a + 0.5) * s * 0.7))
-    tail_r = (x + int(math.cos(a - 0.5) * s * 0.7), y + int(math.sin(a - 0.5) * s * 0.7))
-    pygame.draw.polygon(ctx.surface, ctx.color, [tail, tail_l, tail_r])
-    pygame.draw.circle(ctx.surface, (20, 90, 110), (x, y), s, ctx.thickness or 1)
+    """Hollow blue ring marking water-safe organisms."""
+    x, y, s = ctx.x, ctx.y, ctx.size
+    pygame.draw.circle(ctx.surface, ctx.color, (x, y), s, max(2, s // 3))
+    pygame.draw.circle(ctx.surface, (20, 90, 110), (x, y), s, 1)
 
 
 def draw_armor(ctx: DrawContext) -> None:
@@ -221,46 +224,42 @@ def draw_toxin_gland(ctx: DrawContext) -> None:
 
 
 def draw_venom(ctx: DrawContext) -> None:
-    """Pair of fangs / fork."""
-    x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
-    base = (x, y)
-    base_l = (x + int(math.cos(a - 0.45) * s * 0.2), y + int(math.sin(a - 0.45) * s * 0.2))
-    tip_l = (x + int(math.cos(a - 0.15) * s * 1.5), y + int(math.sin(a - 0.15) * s * 1.5))
-    tip_r = (x + int(math.cos(a + 0.15) * s * 1.5), y + int(math.sin(a + 0.15) * s * 1.5))
-    base_r = (x + int(math.cos(a + 0.45) * s * 0.2), y + int(math.sin(a + 0.45) * s * 0.2))
-    pts = [base, base_l, tip_l, tip_r, base_r]
-    pygame.draw.polygon(ctx.surface, ctx.color, pts)
-    pygame.draw.polygon(ctx.surface, (40, 100, 40), pts, ctx.thickness or 1)
+    """Crossed bones (X) — universal poison/death symbol."""
+    x, y, s = ctx.x, ctx.y, ctx.size
+    w = max(2, s // 2)
+    tip_r = max(1, s // 3)
+    # Two diagonal bones crossing through center.
+    d = s + 1
+    pygame.draw.line(ctx.surface, ctx.color, (x - d, y - d), (x + d, y + d), w)
+    pygame.draw.line(ctx.surface, ctx.color, (x - d, y + d), (x + d, y - d), w)
+    # Bone caps (small circles at each tip).
+    for px, py in ((x - d, y - d), (x + d, y + d), (x - d, y + d), (x + d, y - d)):
+        pygame.draw.circle(ctx.surface, ctx.color, (px, py), tip_r)
 
 
 def draw_asexual(ctx: DrawContext) -> None:
-    """Asexual reproduction shown as a pointed cell with a budding clone behind."""
-    x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
-    # Main arrow-shaped body pointing in the organism's forward direction.
-    tip = (x + int(math.cos(a) * s), y + int(math.sin(a) * s))
-    base_l = (x + int(math.cos(a + 2.5) * s * 0.7), y + int(math.sin(a + 2.5) * s * 0.7))
-    base_r = (x + int(math.cos(a - 2.5) * s * 0.7), y + int(math.sin(a - 2.5) * s * 0.7))
-    pts = [tip, base_l, base_r]
-    pygame.draw.polygon(ctx.surface, ctx.color, pts)
-    pygame.draw.polygon(ctx.surface, (120, 140, 60), pts, ctx.thickness or 1)
-    # Small bud attached to the back, ready to split off.
-    bud_x = x + int(math.cos(a + math.pi) * s * 0.6)
-    bud_y = y + int(math.sin(a + math.pi) * s * 0.6)
-    pygame.draw.circle(ctx.surface, ctx.color, (bud_x, bud_y), max(1, s // 3))
+    """Mitosis — two touching circles (cell division in progress)."""
+    x, y, s = ctx.x, ctx.y, ctx.size
+    r = max(2, int(s * 0.7))
+    gap = max(1, r // 3)
+    cx1 = x - r + gap // 2
+    cx2 = x + r - gap // 2
+    pygame.draw.circle(ctx.surface, ctx.color, (cx1, y), r)
+    pygame.draw.circle(ctx.surface, ctx.color, (cx2, y), r)
+    pygame.draw.circle(ctx.surface, (120, 140, 60), (cx1, y), r, 1)
+    pygame.draw.circle(ctx.surface, (120, 140, 60), (cx2, y), r, 1)
+    # Division line between the two cells.
+    pygame.draw.line(ctx.surface, (120, 140, 60), (x, y - r // 2), (x, y + r // 2), 1)
 
 
 def draw_cannibal(ctx: DrawContext) -> None:
-    """Monster maw with jagged teeth."""
-    x, y, s, a = ctx.x, ctx.y, ctx.size, ctx.angle
-    pygame.draw.circle(ctx.surface, ctx.color, (x, y), s)
-    mouth = [
-        (x + int(math.cos(a + 0.9) * s * 0.6), y + int(math.sin(a + 0.9) * s * 0.6)),
-        (x + int(math.cos(a + 0.45) * s * 1.05), y + int(math.sin(a + 0.45) * s * 1.05)),
-        (x + int(math.cos(a) * s * 0.75), y + int(math.sin(a) * s * 0.75)),
-        (x + int(math.cos(a - 0.45) * s * 1.05), y + int(math.sin(a - 0.45) * s * 1.05)),
-        (x + int(math.cos(a - 0.9) * s * 0.6), y + int(math.sin(a - 0.9) * s * 0.6)),
-    ]
-    pygame.draw.polygon(ctx.surface, (20, 20, 30), mouth)
+    """Single downward fang — predator's bite."""
+    x, y, s = ctx.x, ctx.y, ctx.size
+    tip = (x, y + s * 2)
+    base_l = (x - s, y - s // 2)
+    base_r = (x + s, y - s // 2)
+    pygame.draw.polygon(ctx.surface, ctx.color, [base_l, base_r, tip])
+    pygame.draw.polygon(ctx.surface, (20, 20, 30), [base_l, base_r, tip], 1)
 
 
 def draw_memory(ctx: DrawContext) -> None:
