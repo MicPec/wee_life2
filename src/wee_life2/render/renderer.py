@@ -642,9 +642,9 @@ class Renderer:
         lines = [
             f"tick: {stats.get('tick', 0)}",
             f"organisms: {stats['organisms']}",
+            f"max gen: {stats.get('max_generation', 0)}  min gen: {stats.get('min_generation', 0)}",
             f"food: {stats['food']} births: {stats.get('births', 0)}",
             f"deaths: {stats.get('combat', 0) + stats.get('starvation', 0) + stats.get('age', 0) + stats.get('venom', 0)}",
-            f"max gen: {stats.get('max_generation', 0)}  min gen: {stats.get('min_generation', 0)}",
             f"walls: {stats['walls']} hazards: {stats['hazards']}",
         ]
         if self.edit_mode:
@@ -837,7 +837,6 @@ class Renderer:
         else:
             self.hovered_species = None
         self._draw_organisms(world)
-        self._draw_ui(world.stats())
         if not self.edit_mode and self.show_species:
             self._draw_species_stats()
 
@@ -853,20 +852,24 @@ class Renderer:
 
         if self.edit_mode:
             self._draw_edit_overlay(world)
-        elif self.paused:
-            # While paused, show stats for the organism under the cursor.
-            hovered = self._find_organism_at(world, pygame.mouse.get_pos())
-            if hovered is not None:
-                self._draw_organism_highlight(hovered)
-                self._draw_organism_panel(hovered)
+            # UI drawn after the grid so it stays on top and readable.
+            self._draw_ui(world.stats())
         else:
-            # During simulation, show stats for the selected organism (clicked with
-            # the left mouse button) and clear the selection if it dies.
-            if self.selected_organism is not None and self.selected_organism.is_dead:
-                self.selected_organism = None
-            if self.selected_organism is not None:
-                self._draw_organism_highlight(self.selected_organism)
-                self._draw_organism_panel(self.selected_organism)
+            self._draw_ui(world.stats())
+            if self.paused:
+                # While paused, show stats for the organism under the cursor.
+                hovered = self._find_organism_at(world, pygame.mouse.get_pos())
+                if hovered is not None:
+                    self._draw_organism_highlight(hovered)
+                    self._draw_organism_panel(hovered)
+            else:
+                # During simulation, show stats for the selected organism (clicked with
+                # the left mouse button) and clear the selection if it dies.
+                if self.selected_organism is not None and self.selected_organism.is_dead:
+                    self.selected_organism = None
+                if self.selected_organism is not None:
+                    self._draw_organism_highlight(self.selected_organism)
+                    self._draw_organism_panel(self.selected_organism)
 
         if self.show_legend:
             self._draw_legend()
