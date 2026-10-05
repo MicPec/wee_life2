@@ -207,8 +207,9 @@ class RunLogger:
         deaths_by_species = world.deaths_by_species
         total_deaths = sum(world.deaths.values())
 
-        species_set = set(counts) | set(births_by_species) | set(deaths_by_species)
-        for name in species_set:
+        # Sorted so the event log is byte-reproducible between runs; raw set
+        # order varies with PYTHONHASHSEED and made diffing two runs noisy.
+        for name in sorted(set(counts) | set(births_by_species) | set(deaths_by_species)):
             births = births_by_species.get(name, 0) - self._prev_births_by_species.get(name, 0)
             deaths = deaths_by_species.get(name, 0) - self._prev_deaths_by_species.get(name, 0)
             if births > 0 or deaths > 0:
@@ -319,9 +320,10 @@ class RunLogger:
         if not self.enabled or self._organisms_file is None:
             return
         record = {
-            "uid": getattr(organism, "_uid", None),
+            "uid": organism.uid,
             "name": organism.name,
             "generation": organism.generation,
+            "parents": list(organism.parent_uids),
             "x": round(organism.position[0], 2),
             "y": round(organism.position[1], 2),
             "angle": round(organism.angle, 4),

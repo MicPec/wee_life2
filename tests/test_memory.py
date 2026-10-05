@@ -59,6 +59,29 @@ class TestMemory(unittest.TestCase):
         gene.apply(org, self.world, 0.0)
         self.assertTrue(org.drives)
 
+    def test_memory_wall_recall_steers_away(self):
+        """A remembered wall dead ahead must turn the organism around, not into it."""
+        self.world.set_tile(4, 2, config.TILE_WALL)
+        gene = MemoryGene({"capacity": 5.0, "retention": 1000.0, "recall_range": 100.0, "ray_count": 0.0})
+        org = Organism(DNA([gene]), position=(50.0, 50.0))
+        org.remember((90.0, 50.0), config.TILE_WALL, 0.0, 1.0)
+        org.angle = 0.0  # facing the remembered wall
+        self.world.tick = 1.0
+        gene.apply(org, self.world, 0.0)
+        # Heading correction must be a large turn away, not ~0 (straight into it).
+        self.assertGreater(abs(org.combined_drive()), math.pi / 2.0)
+
+    def test_memory_hazard_recall_steers_away(self):
+        """A remembered lava tile dead ahead must turn the organism around."""
+        self.world.set_tile(4, 2, config.TILE_LAVA)
+        gene = MemoryGene({"capacity": 5.0, "retention": 1000.0, "recall_range": 100.0, "ray_count": 0.0})
+        org = Organism(DNA([gene]), position=(50.0, 50.0))
+        org.remember((90.0, 50.0), config.TILE_LAVA, 0.0, 1.0)
+        org.angle = 0.0
+        self.world.tick = 1.0
+        gene.apply(org, self.world, 0.0)
+        self.assertGreater(abs(org.combined_drive()), math.pi / 2.0)
+
     def test_memory_water_amphibious(self):
         self.world.set_tile(4, 2, config.TILE_WATER)
         gene = MemoryGene(
@@ -89,7 +112,7 @@ class TestMemory(unittest.TestCase):
 
     def test_eye_publishes_perception_event(self):
         self.world.set_tile(3, 2, config.TILE_WALL)
-        gene = EyeGene({"range": 100.0, "fov": 2.0, "terrain_rays": 1.0})
+        gene = EyeGene({"range": 100.0, "fov": 2.0, "terrain_rays": 1.0, "direction": 0.0})
         org = Organism(DNA([gene]), position=(50.0, 50.0))
         org.angle = 0.0
         gene.apply(org, self.world, 0.0)
@@ -99,6 +122,9 @@ class TestMemory(unittest.TestCase):
         self.world.set_tile(3, 2, config.TILE_WALL)
         gene = ScentGene({"range": 100.0, "terrain_rays": 1.0})
         org = Organism(DNA([gene]), position=(50.0, 50.0))
+        # A single terrain ray is cast along the heading, and Organism.__init__
+        # randomises the angle, so this must be pinned or the test is flaky.
+        org.angle = 0.0
         gene.apply(org, self.world, 0.0)
         self.assertTrue(any(e.source == "scent" for e in org.perception_events))
 
@@ -112,7 +138,7 @@ class TestMemory(unittest.TestCase):
 
     def test_memory_consumes_perception_events(self):
         self.world.set_tile(3, 2, config.TILE_WALL)
-        eye = EyeGene({"range": 100.0, "fov": 2.0, "terrain_rays": 1.0, "wall_weight": 0.0})
+        eye = EyeGene({"range": 100.0, "fov": 2.0, "terrain_rays": 1.0, "wall_weight": 0.0, "direction": 0.0})
         memory = MemoryGene({"capacity": 5.0, "retention": 1000.0, "ray_count": 0.0})
         org = Organism(DNA([eye, memory]), position=(50.0, 50.0))
         org.angle = 0.0
@@ -149,7 +175,7 @@ class TestMemory(unittest.TestCase):
         for x in (80.0, 90.0, 100.0, 110.0, 120.0):
             self.world.set_tile(int(x / self.world.tile_size), 2, config.TILE_WALL)
             org.remember((x, 50.0), config.TILE_WALL, 1.0, 1.0)
-        # Point up; walls are to the right, so the combined drive should push left/down (negative).
+        # Point up; walls are to the right, so the combined drive should push away (left).
         org.angle = math.pi / 2.0
         m1.apply(org, self.world, 0.0)
         # Combined capacity is 5, so all 5 wall entries should remain.
@@ -159,8 +185,9 @@ class TestMemory(unittest.TestCase):
         m2.apply(org, self.world, 0.0)
         self.assertEqual(len(org.drives), drive_count_before)
         # Walls are remembered to the right; while pointing up the organism
-        # should be pushed left (negative steering).
-        self.assertLess(org.combined_drive(), -1.0)
+        # should be steered away from them, i.e. the same direction the
+        # non-amphibious water test expects for a repulsive tile.
+        self.assertGreater(org.combined_drive(), 1.0)
 
 
 if __name__ == "__main__":

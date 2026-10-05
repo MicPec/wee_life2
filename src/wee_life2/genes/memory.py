@@ -157,29 +157,33 @@ class MemoryGene(Gene):
             if tile_type == world.TILE_WATER:
                 # Don't steer toward remembered water that is now behind a wall;
                 # that just pins the organism against the obstacle.
-                if world._line_intersects_wall(pos, entry.position):
+                if world.line_crosses_wall(pos, entry.position):
                     continue
                 weight = water_weight * (1.0 if is_amphibious else -1.0) * strength
                 target_angle = to_angle
             elif tile_type in (world.TILE_RADIOACTIVE, world.TILE_LAVA):
-                if world._line_intersects_wall(pos, entry.position):
+                if world.line_crosses_wall(pos, entry.position):
                     continue
                 # Close hazards are handled by touch; memory steers from a distance.
                 if dist < organism.radius * 3.0:
                     continue
+                # `hazard_weight` is negative, which already reverses the
+                # vector; reversing `to_angle` as well would steer *into*
+                # the hazard (same convention as the water branch above).
                 weight = hazard_weight * strength
-                target_angle = to_angle + math.pi
+                target_angle = to_angle
             elif tile_type == world.TILE_WALL:
                 # Walls that are already within whisker range are handled by touch/eye/scent.
                 # Memory handles walls that were seen earlier and may now be out of direct sense.
                 if dist < organism.radius * 3.0:
                     continue
+                # Negative `wall_weight` reverses the vector; see above.
                 weight = wall_weight * strength
-                target_angle = to_angle + math.pi
+                target_angle = to_angle
             elif heal_tile is not None and tile_type == heal_tile:
                 if health_fraction >= heal_threshold:
                     continue
-                if world._line_intersects_wall(pos, entry.position):
+                if world.line_crosses_wall(pos, entry.position):
                     continue
                 weight = heal_weight * strength
                 target_angle = to_angle

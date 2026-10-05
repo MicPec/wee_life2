@@ -67,7 +67,7 @@ Each run writes a timestamped directory under `data/runs/` (configurable via `co
 - `timeseries.csv` — population-level metrics sampled every `config.STATS_SAMPLE_INTERVAL` ticks. Columns include `tick`, `organisms`, `food`, `births`, `deaths`, `species_count`, `diversity`, `avg_energy`, `avg_age`, `max_generation`, `min_generation`, and `top_5`.
 - `events.jsonl` — birth/death/speciation/extinction events.
 - `census.jsonl` — per-species snapshots every `config.STATS_CENSUS_INTERVAL` ticks, including `count`, `pct`, `avg_energy`, `avg_age`, `min_generation`, and `max_generation`.
-- `organisms.jsonl` — one record per created organism, including `uid`, `name`, `generation`, position, angle, radius, and full `dna`.
+- `organisms.jsonl` — one record per created organism, including `uid`, `name`, `generation`, `parents`, position, angle, radius, and full `dna`. `parents` lists the uids the organism descends from (two for sexual reproduction, one for asexual cloning, empty for the founding population), so the pedigree of a run can be reconstructed offline.
 - `meta.json` and `map.json` — run metadata and the tile map.
 
 `generation` lets you compare how fast different species are producing new biological generations, independent of the wall-clock tick count.

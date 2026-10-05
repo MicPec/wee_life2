@@ -42,7 +42,11 @@ def _apply_config_overrides(pairs: list[str]) -> None:
         if key.startswith("_") or not hasattr(config, key):
             raise SystemExit(f"Unknown config option '{key}' (see core/config.py for valid names)")
         current = getattr(config, key)
-        setattr(config, key, _coerce_config_value(raw_value.strip(), current))
+        try:
+            coerced = _coerce_config_value(raw_value.strip(), current)
+        except (TypeError, ValueError) as exc:
+            raise SystemExit(f"Invalid value for --set {key}={raw_value.strip()!r}: {exc}") from exc
+        setattr(config, key, coerced)
 
 
 def _print_config_values(keys: list[str]) -> None:
@@ -114,11 +118,6 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.no_stats:
-        from .core import config as _config
-
-        _config.STATS_ENABLED = False
-
     if args.config_file and not args.edit_config:
         from .core.config_json import load_config_file
 
@@ -129,6 +128,13 @@ def main() -> None:
 
     if args.set:
         _apply_config_overrides(args.set)
+
+    # Applied last so an explicit --no-stats always wins over a config file or
+    # a --set STATS_ENABLED=True that would otherwise re-enable logging.
+    if args.no_stats:
+        from .core import config as _config
+
+        _config.STATS_ENABLED = False
 
     if args.get:
         _print_config_values(args.get)

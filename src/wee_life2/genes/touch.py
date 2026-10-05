@@ -44,6 +44,8 @@ class TouchGene(Gene):
 
     def apply(self, organism: Organism, world: World, dt: float) -> None:
         range_ = self.params["range"]
+        if range_ <= 0.0:
+            return  # whiskers of zero length feel nothing (and must not divide by zero)
         spread = self.params["spread"]
         sensitivity = self.params["sensitivity"]
         hazard_weight = self.params["hazard_weight"]

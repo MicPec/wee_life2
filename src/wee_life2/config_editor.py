@@ -13,7 +13,6 @@ from typing import Any
 from textual.app import App, ComposeResult
 from textual.color import Color
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.reactive import reactive
 from textual.widgets import (
     Button,
     Checkbox,
@@ -653,19 +652,3 @@ def _slider_to_float(slider_value: int, min_value: float, max_value: float, slid
 
 def _slug(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "-", name).strip("-").lower()
-
-
-def main() -> None:
-    """Entry point for the standalone config editor."""
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Wee Life 2 - Config Editor")
-    parser.add_argument(
-        "--config-file",
-        type=str,
-        default=None,
-        help="Path to a JSON config file to open in the editor",
-    )
-    args = parser.parse_args()
-    app = ConfigEditorApp(initial_path=args.config_file)
-    app.run()

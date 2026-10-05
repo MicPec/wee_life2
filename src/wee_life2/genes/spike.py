@@ -27,13 +27,12 @@ class SpikeGene(Gene):
 
     def __init__(self, params=None) -> None:
         super().__init__(params)
-        self._count = max(1, int(self.params["count"]))
         self._last_hit: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
     def body_parts(self, base_color):
         parts = []
-        for i in range(self._count):
-            theta = (2 * math.pi * i) / self._count
+        for i in range(self.part_count):
+            theta = (2 * math.pi * i) / self.part_count
             r = 8.0
             parts.append(
                 BodyPartBlueprint(

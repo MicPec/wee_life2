@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
+from ..core import config
 from .base import BodyPartBlueprint, Gene
 
 if TYPE_CHECKING:
@@ -49,4 +50,4 @@ class PheromoneGene(Gene):
         if organism.can_mate():
             strength = self.params["strength"] * (organism.energy / organism.max_energy)
             organism.pheromone_strength += strength
-            organism.energy -= self.params["cost"] * dt * 60.0
+            organism.energy -= self.params["cost"] * dt * config.TICKS_PER_SECOND

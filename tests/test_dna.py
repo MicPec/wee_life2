@@ -1,6 +1,9 @@
 """Tests for DNA genetics and naming."""
 
 import random
+import os
+import subprocess
+import sys
 import unittest
 
 from wee_life2.core.dna import DNA
@@ -37,10 +40,7 @@ class TestDNA(unittest.TestCase):
         original = [(g.kind, dict(g.params)) for g in dna.genes]
         for _ in range(100):
             dna.mutate(rate=0.9, strength=0.5)
-            changed = any(
-                g.kind != orig[0] or g.params != orig[1]
-                for g, orig in zip(dna.genes, original)
-            )
+            changed = any(g.kind != orig[0] or g.params != orig[1] for g, orig in zip(dna.genes, original))
             if changed:
                 break
         else:
@@ -73,6 +73,34 @@ class TestDNA(unittest.TestCase):
         data = dna.to_dict()
         restored = DNA.from_dict(data)
         self.assertEqual([g.kind for g in dna.genes], [g.kind for g in restored.genes])
+
+    def test_crossover_is_reproducible_across_hash_seeds(self):
+        """A seeded crossover must not depend on set iteration order.
+
+        `crossover` consumes RNG draws per gene kind, so iterating an unordered
+        set made both the child's genome and every later random draw depend on
+        PYTHONHASHSEED -- seeded runs were not reproducible between processes.
+        """
+        script = (
+            "import random;"
+            "from wee_life2.core.dna import DNA;"
+            "random.seed(7);"
+            "a=DNA.random(length=10); b=DNA.random(length=10);"
+            "c=a.crossover(b);"
+            "print(','.join(g.kind for g in c.genes), round(random.random(), 12))"
+        )
+        outputs = set()
+        for hash_seed in ("0", "1", "2"):
+            env = dict(os.environ, PYTHONHASHSEED=hash_seed)
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=True,
+            )
+            outputs.add(result.stdout.strip())
+        self.assertEqual(len(outputs), 1, f"crossover differed across hash seeds: {outputs}")
 
 
 if __name__ == "__main__":

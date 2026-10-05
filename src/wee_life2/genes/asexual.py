@@ -51,7 +51,7 @@ class AsexualGene(Gene):
         ]
 
     def apply(self, organism: Organism, world: World, dt: float) -> None:
-        self._timer -= dt * 60.0
+        self._timer -= dt * config.TICKS_PER_SECOND
         if self._timer > 0.0:
             return
 

@@ -67,6 +67,14 @@ class World:
     def tile_size(self) -> float:
         return self.tile_map.tile_size
 
+    @property
+    def max_x(self) -> float:
+        return self.tile_map.max_x
+
+    @property
+    def max_y(self) -> float:
+        return self.tile_map.max_y
+
     def tile_at(self, position: tuple[float, float]) -> int:
         return self.tile_map.tile_at(position)
 
@@ -97,8 +105,8 @@ class World:
     def line_crosses_hazard(self, a: tuple[float, float], b: tuple[float, float]) -> bool:
         return self.tile_map.line_crosses_hazard(a, b)
 
-    def _line_intersects_wall(self, a: tuple[float, float], b: tuple[float, float]) -> bool:
-        return self.tile_map._line_intersects_wall(a, b)
+    def line_crosses_wall(self, a: tuple[float, float], b: tuple[float, float]) -> bool:
+        return self.tile_map.line_crosses_wall(a, b)
 
     def generate_map(
         self,
@@ -148,8 +156,8 @@ class World:
         species_count = sum(1 for o in self.organisms if not o.is_dead and o.name == organism.name)
         if species_count + 1 > species_cap:
             return False
-        if not hasattr(organism, "_uid"):
-            organism._uid = self._next_organism_uid
+        if organism.uid is None:
+            organism.uid = self._next_organism_uid
             self._next_organism_uid += 1
         self.organisms.append(organism)
         self.spatial_grid.add(organism)
@@ -201,6 +209,8 @@ class World:
         """
         generation = parent.generation + 1 if parent is not None else 1
         organism = Organism(dna, position, generation=generation)
+        if parent is not None and parent.uid is not None:
+            organism.parent_uids = (parent.uid,)
         organism.position = self.tile_map.push_out_of_walls(organism.position, organism.radius)
         if self.add_organism(organism):
             self.record_birth(organism)
@@ -262,10 +272,10 @@ class World:
             new_a = (ax - nx * overlap, ay - ny * overlap)
             new_b = (bx + nx * overlap, by + ny * overlap)
 
-            a_safe = not self.tile_map.is_wall_circle(new_a, a.radius) and not self.tile_map._line_intersects_wall(
+            a_safe = not self.tile_map.is_wall_circle(new_a, a.radius) and not self.tile_map.line_crosses_wall(
                 a.position, new_a
             )
-            b_safe = not self.tile_map.is_wall_circle(new_b, b.radius) and not self.tile_map._line_intersects_wall(
+            b_safe = not self.tile_map.is_wall_circle(new_b, b.radius) and not self.tile_map.line_crosses_wall(
                 b.position, new_b
             )
 
@@ -320,9 +330,11 @@ class World:
     # ------------------------------------------------------------------
     def update(self, dt: float) -> None:
         """Advance the world by one tick."""
-        # Convert wall-clock dt to simulation ticks (one rendered frame at FPS
-        # equals one tick) and track the global generation counter.
-        self.tick += dt * (config.FPS if config.FPS > 0 else 60.0)
+        # Convert wall-clock dt to simulation ticks. This must use the same
+        # time base as every other per-tick rate (config.TICKS_PER_SECOND),
+        # not the rendering FPS, or the tick counter would drift away from
+        # gene timers and energy drains whenever FPS is changed.
+        self.tick += dt * config.TICKS_PER_SECOND
 
         # Update organisms. The spatial grid from the previous tick is used by
         # sensory genes, then we rebuild it for physics and mating.
@@ -338,9 +350,15 @@ class World:
             organism.update(self, dt)
 
     def _remove_dead_organisms(self) -> None:
-        for organism in list(self.organisms):
+        # Single rebuild instead of a list.remove() per corpse, which scanned
+        # the list twice (membership test + removal) for every death.
+        living = [o for o in self.organisms if not o.is_dead]
+        if len(living) == len(self.organisms):
+            return
+        for organism in self.organisms:
             if organism.is_dead:
-                self.remove_organism(organism)
+                self.spatial_grid.remove(organism)
+        self.organisms = living
 
     def _resolve_and_mate_pairs(self) -> None:
         """Resolve collisions and try mating for nearby organism pairs."""
@@ -354,7 +372,9 @@ class World:
             for b in self.spatial_grid.near(a.position, query_radius, exclude=(a,)):
                 if b not in current_set:
                     continue
-                if a._uid >= b._uid:
+                # Handle each unordered pair once. Both are in the world, so
+                # their uids are assigned.
+                if a.uid >= b.uid:
                     continue
                 self._resolve_collision(a, b)
                 child = self._try_mating(a, b)
@@ -363,17 +383,17 @@ class World:
                         self.record_birth(child)
 
     def _update_food(self, dt: float) -> None:
-        for food in list(self.food):
+        for food in self.food:
             food.update(dt)
-            if food.is_gone:
-                self.remove_food(food)
+        # One rebuild per tick beats a list.remove() per decayed item.
+        self.food = [f for f in self.food if not f.is_gone]
 
     def _spawn_food(self, dt: float) -> None:
         self._food_spawn_accum += dt
         if self._food_spawn_accum > 1.0:
             self._food_spawn_accum -= 1.0
-            if len(self.food) < 80 and random.random() < 0.6:
-                self.spawn_food(energy=random.uniform(25, 45))
+            if len(self.food) < config.FOOD_MAX_ITEMS and random.random() < config.FOOD_SPAWN_CHANCE:
+                self.spawn_food(energy=random.uniform(25.0, config.ENERGY_GAIN_FROM_FOOD))
 
     # ------------------------------------------------------------------
     # Statistics
@@ -394,7 +414,7 @@ class World:
         total = len(organisms)
         max_generation = max((o.generation for o in organisms), default=0)
         min_generation = min((o.generation for o in organisms), default=0)
-        result = {
+        return {
             "organisms": total,
             "food": len(self.food),
             "births": self.births,
@@ -403,6 +423,9 @@ class World:
             "tick": int(self.tick),
             "max_generation": max_generation,
             "min_generation": min_generation,
+            # Nested rather than merged into the top level: death causes are
+            # arbitrary strings and used to be flattened into this dict, where
+            # a cause named e.g. "food" or "births" would overwrite a real stat.
+            "deaths": dict(self.deaths),
+            "deaths_total": sum(self.deaths.values()),
         }
-        result.update(self.deaths)
-        return result

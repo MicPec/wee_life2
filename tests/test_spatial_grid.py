@@ -9,7 +9,7 @@ class FakeOrganism:
     def __init__(self, pos, is_dead=False, uid=0):
         self.position = pos
         self.is_dead = is_dead
-        self._uid = uid
+        self.uid = uid
 
 
 class TestSpatialGrid(unittest.TestCase):

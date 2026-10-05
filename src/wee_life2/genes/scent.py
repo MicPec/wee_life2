@@ -6,9 +6,9 @@ import math
 import random
 from typing import TYPE_CHECKING
 
-from ..core import config
 from .base import BodyPartBlueprint, Gene, hsv_to_rgb
 from .geometry import angle_diff, angle_to
+from .sensing import radial_ray_angles, sight_discount, terrain_drive
 
 if TYPE_CHECKING:
     from ..core.organism import Organism
@@ -54,9 +54,11 @@ class ScentGene(Gene):
         ]
 
     def apply(self, organism: Organism, world: World, dt: float) -> None:
+        range_ = self.params["range"]
+        if range_ <= 0.0:
+            return  # range mutated away: an anosmic nose still pays upkeep but smells nothing
         pos = organism.position
         px, py = pos
-        range_ = self.params["range"]
         range_sq = range_ * range_
         range_inv = 1.0 / range_
         precision = max(0.05, self.params["precision"])
@@ -83,12 +85,7 @@ class ScentGene(Gene):
             return random.uniform(-1.0, 1.0) * (1.0 - precision) * 0.5
 
         def discount(target_pos):
-            d = 1.0
-            if not is_amphibious and world.line_crosses_water(pos, target_pos):
-                d *= config.WATER_SIGHT_DISCOUNT
-            if world.line_crosses_hazard(pos, target_pos):
-                d *= config.WATER_SIGHT_DISCOUNT
-            return d
+            return sight_discount(world, pos, target_pos, is_amphibious=is_amphibious)
 
         # Smell food / poison (organisms without a metabolism gene gain
         # nothing from eating, so they have no drive to seek it out)
@@ -153,56 +150,20 @@ class ScentGene(Gene):
             diff, kind, weight = best
             organism.add_drive(diff, 0.8 * weight, kind)
 
-        # Terrain sensing: scent can "smell" walls, hazards, water and (later) heal tiles.
-        # Aggregate all terrain observations into a single vector to avoid
-        # conflicting drives that make the organism spin in place.
+        # Terrain sensing: scent can "smell" walls, hazards, water and heal tiles.
         terrain_rays = int(self.params["terrain_rays"])
         if terrain_rays > 0:
-            wall_weight = self.params["wall_weight"]
-            hazard_weight = self.params["hazard_weight"]
-            water_weight = self.params["water_weight"]
-            heal_weight = self.params["heal_weight"]
-            heal_threshold = self.params["heal_threshold"]
-            heal_tile = getattr(config, "TILE_HEAL", None)
-            health_fraction = organism.energy / organism.max_energy
-            precision = max(0.05, self.params["precision"])
-            total_x = 0.0
-            total_y = 0.0
-            for i in range(terrain_rays):
-                ray_angle = org_angle + i * (2.0 * math.pi / terrain_rays)
-                hit = world.tile_map.first_interesting_tile_along_ray(pos, ray_angle, range_)
-                if hit is None:
-                    continue
-                hit_pos, tile_type = hit
-                organism.add_perception(hit_pos, tile_type, "scent", world.tick)
-                dx = hit_pos[0] - px
-                dy = hit_pos[1] - py
-                dist = math.hypot(dx, dy)
-                if dist < 1.0:
-                    continue
-                strength = (1.0 - dist * range_inv) * precision
-                if tile_type == world.TILE_WALL:
-                    wx, wy = -dx, -dy
-                    w = -wall_weight * strength
-                elif tile_type in (world.TILE_RADIOACTIVE, world.TILE_LAVA):
-                    wx, wy = -dx, -dy
-                    w = -hazard_weight * strength
-                elif tile_type == world.TILE_WATER:
-                    wx, wy = dx, dy
-                    w = water_weight * (1.0 if is_amphibious else -1.0) * strength
-                elif heal_tile is not None and tile_type == heal_tile:
-                    if health_fraction >= heal_threshold:
-                        continue
-                    wx, wy = dx, dy
-                    w = heal_weight * strength
-                else:
-                    continue
-                d = math.hypot(wx, wy)
-                if d > 0:
-                    total_x += (wx / d) * w
-                    total_y += (wy / d) * w
-            if total_x != 0.0 or total_y != 0.0:
-                target_angle = math.atan2(total_y, total_x)
-                drive = angle_diff(target_angle, org_angle)
-                weight = min(1.0, math.hypot(total_x, total_y))
-                organism.add_drive(drive, weight, "terrain")
+            terrain_drive(
+                organism,
+                world,
+                ray_angles=radial_ray_angles(org_angle, terrain_rays),
+                range_=range_,
+                sharpness=max(0.05, self.params["precision"]),
+                source="scent",
+                wall_weight=self.params["wall_weight"],
+                hazard_weight=self.params["hazard_weight"],
+                water_weight=self.params["water_weight"],
+                is_amphibious=is_amphibious,
+                heal_weight=self.params["heal_weight"],
+                heal_threshold=self.params["heal_threshold"],
+            )

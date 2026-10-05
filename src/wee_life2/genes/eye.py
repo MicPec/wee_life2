@@ -6,9 +6,9 @@ import math
 import random
 from typing import TYPE_CHECKING
 
-from ..core import config
 from .base import BodyPartBlueprint, Gene, hsv_to_rgb
-from .geometry import angle_diff, angle_to, wrap_angle
+from .geometry import angle_diff, angle_to
+from .sensing import fan_ray_angles, sight_discount, terrain_drive
 
 if TYPE_CHECKING:
     from ..core.organism import Organism
@@ -33,6 +33,7 @@ class EyeGene(Gene):
         "terrain_rays": 3.0,
         "direction": 0.0,  # radians offset from the organism's forward angle
     }
+    wrap_params = frozenset({"direction"})  # signed, so eyes can evolve to point sideways
 
     def __init__(self, params=None) -> None:
         super().__init__(params)
@@ -42,25 +43,6 @@ class EyeGene(Gene):
         # so that multiple eyes on the same organism can look different ways.
         if not params or "direction" not in params:
             self.params["direction"] = random.uniform(-1.3, 1.3)
-
-    def mutate(self, rate: float, strength: float) -> None:
-        for key in self.params:
-            if random.random() >= rate:
-                continue
-            if key == "direction":
-                noise = (random.random() * 2.0 - 1.0) * strength * math.pi
-                self.params[key] = wrap_angle(self.params[key] + noise)
-            else:
-                noise = (random.random() * 2.0 - 1.0) * strength
-                self.params[key] *= 1.0 + noise
-                if key.endswith("_weight"):
-                    default = self.default_params.get(key, 0.0)
-                    if default < 0:
-                        self.params[key] = min(0.0, self.params[key])
-                    else:
-                        self.params[key] = max(0.0, self.params[key])
-                else:
-                    self.params[key] = max(0.0, self.params[key])
 
     def body_parts(self, base_color):
         range_ = self.params["range"]
@@ -79,13 +61,15 @@ class EyeGene(Gene):
         ]
 
     def apply(self, organism: Organism, world: World, dt: float) -> None:
+        range_ = self.params["range"]
+        if range_ <= 0.0:
+            return  # range mutated away: a blind eye still pays upkeep but senses nothing
         pos = organism.position
         px, py = pos
         angle = organism.angle
         view_angle = angle + self.params["direction"]
         fov = self.params["fov"]
         half_fov = fov / 2
-        range_ = self.params["range"]
         range_sq = range_ * range_
         range_inv = 1.0 / range_
         acuity = self.params["acuity"]
@@ -119,12 +103,7 @@ class EyeGene(Gene):
             return dist
 
         def discount(target_pos):
-            d = 1.0
-            if not is_amphibious and world.line_crosses_water(pos, target_pos):
-                d *= config.WATER_SIGHT_DISCOUNT
-            if world.line_crosses_hazard(pos, target_pos):
-                d *= config.WATER_SIGHT_DISCOUNT
-            return d
+            return sight_discount(world, pos, target_pos, is_amphibious=is_amphibious)
 
         def direction_diff(target_pos):
             return angle_diff(angle_to(pos, target_pos), angle)
@@ -176,49 +155,17 @@ class EyeGene(Gene):
             organism.add_drive(diff, weight, kind)
 
         # Terrain sensing: walls, hazards and water within the field of view.
-        # Gather all terrain observations into a single vector so that multiple
-        # nearby walls/hazards do not fight each other and cause spinning.
         terrain_rays = int(self.params["terrain_rays"])
         if terrain_rays > 0:
-            wall_weight = self.params["wall_weight"]
-            hazard_weight = self.params["hazard_weight"]
-            water_weight = self.params["water_weight"]
-            fov = self.params["fov"]
-            half_fov = fov / 2.0
-            start_angle = view_angle - half_fov
-            step = fov / max(1, terrain_rays - 1) if terrain_rays > 1 else 0.0
-            total_x = 0.0
-            total_y = 0.0
-            for i in range(terrain_rays):
-                ray_angle = start_angle + i * step
-                hit = world.tile_map.first_interesting_tile_along_ray(pos, ray_angle, range_)
-                if hit is None:
-                    continue
-                hit_pos, tile_type = hit
-                organism.add_perception(hit_pos, tile_type, "eye", world.tick)
-                dx = hit_pos[0] - px
-                dy = hit_pos[1] - py
-                dist = math.hypot(dx, dy)
-                if dist < 1.0:
-                    continue
-                strength = (1.0 - dist * range_inv) * acuity
-                if tile_type == world.TILE_WALL:
-                    wx, wy = -dx, -dy
-                    w = -wall_weight * strength
-                elif tile_type in (world.TILE_RADIOACTIVE, world.TILE_LAVA):
-                    wx, wy = -dx, -dy
-                    w = -hazard_weight * strength
-                elif tile_type == world.TILE_WATER:
-                    wx, wy = dx, dy
-                    w = water_weight * (1.0 if is_amphibious else -1.0) * strength
-                else:
-                    continue
-                d = math.hypot(wx, wy)
-                if d > 0:
-                    total_x += (wx / d) * w
-                    total_y += (wy / d) * w
-            if total_x != 0.0 or total_y != 0.0:
-                target_angle = math.atan2(total_y, total_x)
-                drive = angle_diff(target_angle, angle)
-                weight = min(1.0, math.hypot(total_x, total_y))
-                organism.add_drive(drive, weight, "terrain")
+            terrain_drive(
+                organism,
+                world,
+                ray_angles=fan_ray_angles(view_angle, fov, terrain_rays),
+                range_=range_,
+                sharpness=acuity,
+                source="eye",
+                wall_weight=self.params["wall_weight"],
+                hazard_weight=self.params["hazard_weight"],
+                water_weight=self.params["water_weight"],
+                is_amphibious=is_amphibious,
+            )

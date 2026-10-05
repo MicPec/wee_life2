@@ -32,6 +32,32 @@ class TestSmoke(unittest.TestCase):
 
         sim.renderer.close()
 
+    def test_action_dispatch_covers_every_action(self):
+        """A dispatch table can silently drop an action; assert full coverage.
+
+        The old isinstance chain had the same risk, but at least crashed
+        loudly on a typo. This guards the table against a new Action being
+        added to render/actions.py without a handler.
+        """
+        from wee_life2.render import actions
+
+        declared = {
+            obj
+            for name, obj in vars(actions).items()
+            if isinstance(obj, type) and issubclass(obj, actions.Action) and obj is not actions.Action
+        }
+        missing = declared - set(Simulation._ACTION_HANDLERS)
+        self.assertEqual(missing, set(), f"actions without a handler: {sorted(c.__name__ for c in missing)}")
+
+    def test_unknown_action_is_ignored(self):
+        from wee_life2.render.actions import Action
+
+        sim = Simulation(width=240.0, height=180.0)
+        try:
+            sim._handle_action(Action())  # must not raise
+        finally:
+            sim.renderer.close()
+
     def test_world_generates_map_with_borders(self):
         sim = Simulation(width=240.0, height=180.0)
         border = 0

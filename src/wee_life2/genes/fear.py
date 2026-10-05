@@ -46,6 +46,8 @@ class FearGene(Gene):
     def apply(self, organism: Organism, world: World, dt: float) -> None:
         pos = organism.position
         range_ = self.params["range"]
+        if range_ <= 0.0:
+            return
         range_sq = range_ * range_
         best_score = 0.0
         best_angle = None
@@ -63,9 +65,12 @@ class FearGene(Gene):
             if d2 > range_sq or d2 < 1:
                 continue
             dist = math.hypot(dx, dy)
-            # Direction away from the threat
-            away_angle = math.atan2(-dy, -dx)
-            diff = angle_diff(away_angle, organism.angle)
+            # Direction *toward* the threat: `add_drive` turns away from the
+            # given angle when the weight is negative, and `danger_weight` is
+            # negative.  Passing an already-reversed angle here would negate
+            # twice and steer the organism straight into the threat.
+            toward_angle = math.atan2(dy, dx)
+            diff = angle_diff(toward_angle, organism.angle)
             score = (threat_level - 1.0) * (1 - dist / range_)
             if score > best_score:
                 best_score = score
@@ -93,8 +98,9 @@ class FearGene(Gene):
                 if d2 > alarm_range_sq or d2 < 1:
                     continue
                 dist = math.hypot(dx, dy)
-                away_angle = math.atan2(-dy, -dx)
-                diff = angle_diff(away_angle, organism.angle)
+                # Toward the alarmed kin; the negative `danger_weight` turns away.
+                toward_angle = math.atan2(dy, dx)
+                diff = angle_diff(toward_angle, organism.angle)
                 score = other.alarm_level * sensitivity * (1 - dist / alarm_range)
                 if score > best_score:
                     best_score = score

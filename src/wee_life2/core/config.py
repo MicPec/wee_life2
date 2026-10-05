@@ -3,15 +3,22 @@
 # Window / rendering
 WINDOW_WIDTH = 1200  # simulation window width in pixels
 WINDOW_HEIGHT = 900  # simulation window height in pixels
-FPS = 60  # target frames per second
+FPS = 60  # target frames per second (rendering only)
 GRAY_WITH_AGE = True  # whether organisms fade to gray as they age
 TILE_SIZE = 20  # size of one world tile in pixels
+
+# Simulation time base
+# Every per-tick rate in the codebase (energy drain, ageing, movement, gene
+# timers) is expressed per *tick*, and wall-clock dt is converted with
+# `dt * config.TICKS_PER_SECOND`. Keep this separate from FPS: FPS is only the
+# rendering target, so changing it must not silently rescale the whole ecology.
+TICKS_PER_SECOND = 60.0  # simulation ticks per second of wall-clock time
 
 # World
 WORLD_WIDTH = 1200  # logical world width in pixels
 WORLD_HEIGHT = 900  # logical world height in pixels
 POPULATION_CAP = 0.1  # soft fraction of world area that can be covered by organisms
-SPECIES_CAP_FRACTION = 0.5  # no single species can exceed this fraction of max_organisms
+SPECIES_CAP_FRACTION = 1.0  # no single species can exceed this fraction of max_organisms
 
 # Statistics logging
 STATS_ENABLED = True  # write per-run statistics to disk
@@ -23,7 +30,6 @@ STATS_CENSUS_INTERVAL = 300  # ticks between per-species census snapshots
 MAX_SPEED = 2.0  # maximum base movement speed
 FRICTION = 0.92  # velocity decay applied each tick
 TURN_RATE = 0.30  # how fast an organism can change its heading
-COLLISION_PUSH = 0.5  # separation impulse after organism-organism collisions
 MAX_ORGANISM_RADIUS = 20.0  # hard cap on body radius; oversized genomes are scaled down to fit
 
 # Age-based movement slowdown
@@ -38,6 +44,9 @@ ENERGY_COST_STAY = 0.008  # base energy cost per tick while idle
 ENERGY_COST_ATTACK = 5.0  # energy spent when biting another organism
 ENERGY_COST_MATE = 20.0  # energy spent by each parent during sexual reproduction
 ENERGY_TO_MATE = 35.0  # minimum energy required to be eligible for mating
+REFERENCE_BODY_MASS = 200.0  # body mass (sum of body part areas) treated as mass ratio 1.0
+MASS_UPKEEP_FACTOR = 1.0  # how strongly body mass scales idle upkeep (up when heavy, down when light; floored at 0)
+GENE_UPKEEP_COST = 0.005  # extra idle energy cost per tick for each gene in the genome
 
 # Lifespan / reproduction
 MAX_GENES = 16  # hard cap on genome length; insertions are ignored once reached
@@ -48,9 +57,11 @@ ASEXUAL_MATURITY_MIN_FRACTION = 0.4  # asexual reproduction needs twice the matu
 MATURITY_MAX_FRACTION = 0.8  # too old to mate above this fraction of lifespan
 MUTATION_RATE = 0.1  # chance per gene that a parameter mutates during reproduction
 MUTATION_STRENGTH = 0.15  # how much a mutated parameter can change
+MUTATION_STEP_FLOOR = 0.05  # minimum additive mutation scale; lets 0.0-valued parameters evolve
 MUTATION_INSERTION_RATE = 0.05  # probability of adding a new gene during structural mutation
+CROSSOVER_BLEND_RATE = 0.5  # chance that a shared gene's parameters are averaged instead of copied
 MATING_RATE = 0.3  # probability that a collision between two eligible organisms results in mating
-MATING_DIVERSITY = 0.5  # maximum genome diversity allowed for two organisms to mate
+MATING_DIVERSITY = 0.45  # maximum genome diversity allowed for two organisms to mate
 MATING_DENSITY_RADIUS = 80  # radius for checking local population density before mating
 MATING_DENSITY_LIMIT = 3  # maximum number of nearby organisms allowed for mating
 MATING_DEATH_CHANCE = 0.05  # chance that mating fails and one parent dies instead
@@ -61,7 +72,7 @@ GENE_DEFAULT_SPAWN_WEIGHT = 1.0  # default relative chance of any gene in random
 GENE_SPAWN_WEIGHTS = {  # per-gene overrides; higher = more common
     "asexual": 0.4,  # much rarer, because it tends to dominate the map
     "spike": 0.7,  # rarer, since it directly raises aggression
-    "cannibal": 0.4,  # rarer, since it amplifies aggression when starving
+    "cannibal": 0.6,  # rarer, since it amplifies aggression when starving
     "pheromone": 1.5,  # boosts mate signalling
     "eye": 1.5,  # sight is a strong sense
     "scent": 1.8,  # scent is a strong sense
@@ -77,14 +88,18 @@ RADIATION_DAMAGE = 3.0  # energy damage per tick on radioactive tiles
 LAVA_DAMAGE = 10.0  # energy damage per tick on lava tiles
 
 # Healing
-HEAL_ENERGY = 2.0  # energy restored per tick while standing on a heal tile
+HEAL_ENERGY = 0.3  # energy restored per tick while standing on a heal tile
+
+# Ambient food stream
+FOOD_SPAWN_CHANCE = 0.8  # probability of spawning one food item per second
+FOOD_MAX_ITEMS = 80  # ambient spawning pauses while this many food items exist
 
 # Death / remains
 FOOD_ON_DEATH_CHANCE = 0.75  # probability a dead organism leaves behind edible remains
 
 # Water
 WATER_SPEED_PENALTY = 0.25  # velocity multiplier for non-amphibious organisms in water
-WATER_DROWN_DAMAGE = 0.5  # energy drained per tick while non-amphibious organisms are in water
+WATER_DROWN_DAMAGE = 0.3  # energy drained per tick while non-amphibious organisms are in water
 AMPHIBIOUS_LAND_DRAIN = 0.1  # energy drained per tick while amphibious organisms are on land
 WATER_SIGHT_DISCOUNT = 0.25  # eye/scent score multiplier for targets seen/smelled across water (non-amphibious)
 

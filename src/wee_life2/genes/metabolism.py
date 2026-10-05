@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..core import config
 from .base import Gene
 
 if TYPE_CHECKING:
@@ -21,6 +22,11 @@ class MetabolismGene(Gene):
         "radiation_resistance": 0.0,
         "regeneration": 0.0,
     }
+    param_bounds = {
+        "efficiency": (0.0, 0.85),  # 1.0 would delete the idle drain; keep at least 15% of it
+        "lifespan_factor": (0.2, 3.0),  # at/below 0 every newborn dies instantly
+        "regeneration": (0.0, 0.1),  # heals from nothing: keep the leak negligible
+    }
 
     def apply(self, organism: Organism, world: World, dt: float) -> None:
         efficiency = self.params["efficiency"]
@@ -28,12 +34,13 @@ class MetabolismGene(Gene):
         radiation = self.params["radiation_resistance"]
         regen = self.params["regeneration"]
 
-        # Base energy drain is modified by efficiency (higher = slower drain)
-        organism.energy -= 0.005 * (1.0 - efficiency) * dt * 60.0
+        # Efficiency reduces the organism's idle upkeep (higher = slower drain).
+        # Multiplicative so several metabolism genes compound.
+        organism.upkeep_efficiency *= 1.0 - efficiency
 
         # Regeneration restores health/energy slowly
         if regen > 0 and organism.energy < organism.max_energy:
-            organism.energy += regen * 0.05 * dt * 60.0
+            organism.energy += regen * 0.05 * dt * config.TICKS_PER_SECOND
             organism.energy = min(organism.energy, organism.max_energy)
 
         # Resistance to environmental hazards accumulates across metabolism genes

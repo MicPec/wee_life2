@@ -57,6 +57,20 @@ class TestMain(unittest.TestCase):
         with self.assertRaises(SystemExit):
             main_module._apply_config_overrides(["NOT_A_REAL_KEY=1"])
 
+    def test_invalid_value_raises_systemexit_not_traceback(self):
+        """A bad --set value must be a clean CLI error, not a ValueError traceback."""
+        self._save("MATING_RATE", "GRAY_WITH_AGE", "FPS")
+        for pair in ("MATING_RATE=abc", "GRAY_WITH_AGE=banana", "FPS=notanint"):
+            with self.assertRaises(SystemExit, msg=f"{pair} should exit cleanly"):
+                main_module._apply_config_overrides([pair])
+
+    def test_invalid_bool_does_not_silently_disable_flag(self):
+        self._save("GRAY_WITH_AGE")
+        config.GRAY_WITH_AGE = True
+        with self.assertRaises(SystemExit):
+            main_module._apply_config_overrides(["GRAY_WITH_AGE=banana"])
+        self.assertTrue(config.GRAY_WITH_AGE, "the flag must be left untouched")
+
     def _make_config_file(self, data: dict) -> str:
         f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
         json.dump(data, f)
@@ -96,6 +110,29 @@ class TestMain(unittest.TestCase):
                 self.assertIn("MATING_RATE = 0.5", stdout.getvalue())
         finally:
             os.unlink(path)
+
+    def test_no_stats_wins_over_config_file(self):
+        """--no-stats is explicit intent and must not be undone by a config file."""
+        self._save("STATS_ENABLED")
+        config.STATS_ENABLED = True
+        path = self._make_config_file({"STATS_ENABLED": True})
+        try:
+            argv = ["wee-life2", "--config-file", path, "--no-stats", "--get", "STATS_ENABLED"]
+            with patch.object(sys, "argv", argv):
+                with redirect_stdout(io.StringIO()):
+                    main_module.main()
+            self.assertFalse(config.STATS_ENABLED)
+        finally:
+            os.unlink(path)
+
+    def test_no_stats_wins_over_set(self):
+        self._save("STATS_ENABLED")
+        config.STATS_ENABLED = True
+        argv = ["wee-life2", "--set", "STATS_ENABLED=True", "--no-stats", "--get", "STATS_ENABLED"]
+        with patch.object(sys, "argv", argv):
+            with redirect_stdout(io.StringIO()):
+                main_module.main()
+        self.assertFalse(config.STATS_ENABLED)
 
     def test_missing_config_file_raises(self):
         argv = ["wee-life2", "--config-file", "does_not_exist.json"]

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 from ..core.geometry import angle_diff as _angle_diff
@@ -13,7 +12,6 @@ from ..core.geometry import wrap_angle as _wrap_angle
 
 if TYPE_CHECKING:
     from ..core.organism import Organism
-    from ..core.world import World
 
 
 def wrap_angle(angle: float) -> float:
@@ -64,4 +62,6 @@ def steer_away(
     kind: str | None = None,
 ) -> None:
     """Add a drive that turns the organism away from a target."""
-    organism.add_drive(direction_to(organism, target_pos) + math.pi, -abs(weight), kind)
+    # A negative weight already reverses the steering vector, so the angle
+    # must point *at* the target; adding pi here too would cancel out.
+    organism.add_drive(direction_to(organism, target_pos), -abs(weight), kind)

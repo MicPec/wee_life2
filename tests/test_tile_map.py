@@ -52,12 +52,12 @@ class TestTileMap(unittest.TestCase):
         pos = self.tile_map.random_empty_position(radius=5)
         self.assertTrue(self.tile_map.is_empty_circle(pos, 5))
 
-    def test_line_intersects_wall(self):
+    def testline_crosses_wall(self):
         self.tile_map.set_tile(2, 2, config.TILE_WALL)
         # line from a non-wall tile to the wall tile
-        self.assertTrue(self.tile_map._line_intersects_wall((30, 30), (45, 45)))
+        self.assertTrue(self.tile_map.line_crosses_wall((30, 30), (45, 45)))
         # line entirely inside an empty tile
-        self.assertFalse(self.tile_map._line_intersects_wall((30, 30), (35, 35)))
+        self.assertFalse(self.tile_map.line_crosses_wall((30, 30), (35, 35)))
 
     def test_line_crosses_water(self):
         self.tile_map.set_tile(3, 3, config.TILE_WATER)
@@ -132,6 +132,31 @@ class TestTileMap(unittest.TestCase):
         self.tile_map.generate_map(heal_rate=0.5)
         heal_count = sum(row.count(config.TILE_HEAL) for row in self.tile_map.tiles)
         self.assertGreater(heal_count, 0)
+
+    def test_is_wall_circle_at_world_edges(self):
+        """A circle clamped to any world edge must not count as a wall."""
+        tile_map = TileMap(1200, 900)
+        mid_x = tile_map.max_x / 2
+        mid_y = tile_map.max_y / 2
+        for r in (6, 14, 30):
+            self.assertFalse(tile_map.is_wall_circle((tile_map.max_x - r, mid_y), r))
+            self.assertFalse(tile_map.is_wall_circle((r, mid_y), r))
+            self.assertFalse(tile_map.is_wall_circle((mid_x, tile_map.max_y - r), r))
+            self.assertFalse(tile_map.is_wall_circle((mid_x, r), r))
+            # A circle genuinely sticking out of the board is still a wall.
+            self.assertTrue(tile_map.is_wall_circle((tile_map.max_x + 5, mid_y), r))
+
+    def test_is_wall_circle_edge_non_multiple_size(self):
+        """When the board size is not a tile multiple the uncovered strip is
+        outside the grid, but the last tile still reaches the far edge."""
+        tile_map = TileMap(1210, 905)
+        for r in (6, 14, 30):
+            self.assertFalse(tile_map.is_wall_circle((tile_map.max_x - r, 450), r))
+
+    def test_line_crosses_wall_ending_at_edge(self):
+        tile_map = TileMap(1200, 900)
+        self.assertFalse(tile_map.line_crosses_wall((tile_map.max_x - 100, 450), (tile_map.max_x - 10, 450)))
+        self.assertFalse(tile_map.line_crosses_wall((tile_map.max_x - 10, 450), (tile_map.max_x - 100, 450)))
 
 
 if __name__ == "__main__":

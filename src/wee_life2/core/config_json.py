@@ -21,6 +21,9 @@ __all__ = [
 
 _JSON_SERIALIZABLE_TYPES = (int, float, bool, str, list, tuple, dict)
 
+_TRUE_TOKENS = frozenset({"1", "true", "yes", "on"})
+_FALSE_TOKENS = frozenset({"0", "false", "no", "off"})
+
 
 def _is_public_config_attr(name: str, value: object) -> bool:
     return not name.startswith("_") and not callable(value) and isinstance(value, _JSON_SERIALIZABLE_TYPES)
@@ -42,7 +45,14 @@ def coerce_value(value: Any, current: Any) -> Any:
 
     if isinstance(current, bool):
         if isinstance(value, str):
-            return value.strip().lower() in ("1", "true", "yes", "on")
+            token = value.strip().lower()
+            if token in _TRUE_TOKENS:
+                return True
+            if token in _FALSE_TOKENS:
+                return False
+            # Never silently coerce garbage to False: `--set FLAG=banana`
+            # used to quietly disable the flag instead of reporting an error.
+            raise TypeError(f"expected one of {sorted(_TRUE_TOKENS | _FALSE_TOKENS)}, got {value!r}")
         if isinstance(value, bool):
             return value
         raise TypeError(f"expected bool, got {type(value).__name__}")

@@ -33,6 +33,14 @@ class TestOrganism(unittest.TestCase):
         sizes = [bp.blueprint.size for bp in organism.body_parts]
         self.assertEqual(sizes, sorted(sizes, reverse=True))
 
+    def test_zero_lifespan_does_not_crash(self):
+        """A degenerate LIFESPAN_BASE=0 override must not divide by zero."""
+        organism = Organism(DNA([LegGene()]), position=(100.0, 90.0))
+        organism.base_lifespan = 0.0
+        organism.lifespan = 0.0
+        organism.update(self.world, 1.0 / config.FPS)  # must not raise
+        self.assertTrue(organism.is_dead, "a zero-lifespan organism dies of age")
+
     def test_nearby_organisms_cache(self):
         dna = DNA.random()
         a = self.world.spawn_organism(dna, (50.0, 50.0))
@@ -191,6 +199,45 @@ class TestOrganism(unittest.TestCase):
         self.assertEqual(organism.radius, radius_at_birth)
         organism.age = organism.base_lifespan * config.MATURITY_MIN_FRACTION + 100
         self.assertEqual(organism.radius, radius_at_birth)
+
+    def _edge_world(self):
+        # No clear_map(): a border of wall tiles would exercise the wall
+        # collision branch instead of the world-bounds branch.
+        return World(1200, 900)
+
+    def test_right_edge_bounce_reflects_heading(self):
+        """An organism thrusting into the right edge must turn inward, not
+        keep pressing against the edge and sliding along it."""
+        world = self._edge_world()
+        organism = Organism(DNA([LegGene()]), (0.0, 0.0))
+        organism.angle = 0.0  # Organism.__init__ randomises angle; pin it.
+        organism.wander_angle = 0.0
+        organism.wander_timer = 1e9  # keep wander from re-randomising the heading
+        organism.position = (world.max_x - organism.radius, 450.0)
+        self.assertTrue(world.add_organism(organism))
+
+        organism.update(world, 1.0 / config.FPS)
+        self.assertLess(math.cos(organism.angle), 0.0)
+
+        for _ in range(120):
+            organism.update(world, 1.0 / config.FPS)
+        self.assertLess(organism.position[0], world.max_x - organism.radius - 2.0)
+
+    def test_top_edge_bounce_reflects_heading(self):
+        world = self._edge_world()
+        organism = Organism(DNA([LegGene()]), (600.0, 0.0))
+        organism.angle = -math.pi / 2
+        organism.wander_angle = -math.pi / 2
+        organism.wander_timer = 1e9
+        organism.position = (600.0, organism.radius)
+        self.assertTrue(world.add_organism(organism))
+
+        organism.update(world, 1.0 / config.FPS)
+        self.assertGreater(math.sin(organism.angle), 0.0)
+
+        for _ in range(120):
+            organism.update(world, 1.0 / config.FPS)
+        self.assertGreater(organism.position[1], organism.radius + 2.0)
 
 
 if __name__ == "__main__":

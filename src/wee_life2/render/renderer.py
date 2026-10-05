@@ -24,6 +24,7 @@ from .body_drawing import BODY_DRAWERS, DrawContext, draw_generic
 from .legend_drawing import draw_legend_icon
 from .tile_drawing import (
     ANIMATED_TILES,
+    EDIT_TOOLS,
     draw_grid,
     draw_tile_highlight,
     draw_tiles,
@@ -33,18 +34,15 @@ from .tile_drawing import (
 if TYPE_CHECKING:
     from ..core.world import World
 
+# Upper bound for blueprint-driven outline widths, so a runaway mutated
+# `armor.thickness` cannot swamp the body it is meant to outline.
+MAX_OUTLINE_THICKNESS = 4
+
 
 class Renderer:
     """Draws the world using Pygame."""
 
-    EDIT_TOOLS = {
-        0: ("empty", config.TILE_EMPTY),
-        1: ("wall", config.TILE_WALL),
-        2: ("radioactive", config.TILE_RADIOACTIVE),
-        3: ("lava", config.TILE_LAVA),
-        4: ("water", config.TILE_WATER),
-        5: ("heal", config.TILE_HEAL),
-    }
+    EDIT_TOOLS = EDIT_TOOLS
     MAX_FRAME_DT = (
         1.0 / 20.0
     )  # hard cap on simulated seconds per frame; guards against lag-spike damage/movement bursts
@@ -106,10 +104,18 @@ class Renderer:
 
     def _handle_key_event(self, event: pygame.event.Event, actions: list[Action]) -> None:
         """Handle a KEYDOWN event and optionally append an action."""
-        if event.key == pygame.K_ESCAPE:
-            if self.confirming_reset:
+        # The reset confirmation is modal: while it is up it swallows every key
+        # so the user cannot toggle edit mode, quit or spawn by accident while
+        # answering "really reset?".
+        if self.confirming_reset:
+            if event.key == pygame.K_y:
+                actions.append(ResetAction())
+            if event.key in (pygame.K_y, pygame.K_n, pygame.K_c, pygame.K_ESCAPE):
                 self.confirming_reset = False
-            elif self.edit_mode:
+            return
+
+        if event.key == pygame.K_ESCAPE:
+            if self.edit_mode:
                 self.edit_mode = False
                 self.paused = False
                 self.drawing = False
@@ -136,14 +142,7 @@ class Renderer:
             self.clear_map_cache()
             if self.edit_mode:
                 self.show_legend = False
-        elif self.edit_mode and event.key in (
-            pygame.K_0,
-            pygame.K_1,
-            pygame.K_2,
-            pygame.K_3,
-            pygame.K_4,
-            pygame.K_5,
-        ):
+        elif self.edit_mode and (event.key - pygame.K_0) in self.EDIT_TOOLS:
             self._select_tool(event.key - pygame.K_0)
         elif self.edit_mode and event.key == pygame.K_s:
             actions.append(SaveAction())
@@ -151,11 +150,6 @@ class Renderer:
             actions.append(ClearAction())
         elif self.edit_mode and event.key == pygame.K_r:
             actions.append(RandomizeAction())
-        elif self.confirming_reset and event.key == pygame.K_y:
-            actions.append(ResetAction())
-            self.confirming_reset = False
-        elif self.confirming_reset and event.key in (pygame.K_n, pygame.K_c):
-            self.confirming_reset = False
         elif not self.edit_mode and event.key == pygame.K_r:
             actions.append(SpawnRandomAction())
         elif not self.edit_mode and event.key == pygame.K_c:
@@ -359,6 +353,14 @@ class Renderer:
             size = int(part.blueprint.size * scale)
             color = self._desaturate_color(part.blueprint.color, age_ratio)
 
+            # Outline width carried by the blueprint (currently the `armor`
+            # gene's `thickness`). Without this the field stayed at its 0
+            # default and every `ctx.thickness or N` fell back to N, so the
+            # gene's thickness had no visual effect at all. Clamped because
+            # `thickness` is an unbounded, mutating gene parameter.
+            params = part.blueprint.params
+            thickness = int(min(MAX_OUTLINE_THICKNESS, max(0.0, params.get("thickness", 0.0)))) if params else 0
+
             ctx = DrawContext(
                 surface=surface,
                 x=int(x),
@@ -368,7 +370,8 @@ class Renderer:
                 color=color,
                 organism=proxy,
                 overlays=overlays,
-                params=part.blueprint.params,
+                thickness=thickness,
+                params=params,
             )
             drawer = BODY_DRAWERS.get(part.blueprint.kind, draw_generic)
             drawer(ctx)
@@ -549,7 +552,7 @@ class Renderer:
                 self.screen.blit(surf, (x + margin + x_off, line_y))
 
     LEGEND = [
-        ("body", "main body / color gene", (180, 180, 180), "circle"),
+        ("body", "main body / color gene", (180, 180, 180), "body"),
         ("eye", "vision and steering", (240, 240, 240), "eye"),
         ("jaw", "eating and biting", (200, 120, 100), "pincer"),
         ("leg", "movement", (120, 120, 120), "limb"),
@@ -644,7 +647,7 @@ class Renderer:
             f"organisms: {stats['organisms']}",
             f"max gen: {stats.get('max_generation', 0)}  min gen: {stats.get('min_generation', 0)}",
             f"food: {stats['food']} births: {stats.get('births', 0)}",
-            f"deaths: {stats.get('combat', 0) + stats.get('starvation', 0) + stats.get('age', 0) + stats.get('venom', 0)}",
+            f"deaths: {stats.get('deaths_total', 0)}",
             f"walls: {stats['walls']} hazards: {stats['hazards']}",
         ]
         if self.edit_mode:

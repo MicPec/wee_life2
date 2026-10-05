@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -101,18 +102,29 @@ class DNA:
 
         a = group(self)
         b = group(other)
-        all_kinds = set(a.keys()) | set(b.keys())
+        # Sorted, not raw set order: each kind consumes RNG draws below, so
+        # iterating a set made the child's genes *and* the whole downstream
+        # random sequence depend on PYTHONHASHSEED.  That silently made seeded
+        # runs irreproducible between processes, which breaks offline analysis
+        # of the logs in data/runs.
+        all_kinds = sorted(set(a.keys()) | set(b.keys()))
 
         for kind in all_kinds:
             a_genes = a.get(kind, [])
             b_genes = b.get(kind, [])
-            # Average number of copies from both parents
-            count = int(round((len(a_genes) + len(b_genes)) / 2.0))
+            # Haploid inheritance: the average copy count, with an odd copy
+            # segregating with p=0.5.  int(round(0.5)) == 0 (banker's rounding)
+            # used to drop every gene carried by only one parent, which made
+            # insertion mutations unable to spread through sexual reproduction.
+            total = len(a_genes) + len(b_genes)
+            count = total // 2 + (1 if total % 2 and random.random() < 0.5 else 0)
             if count == 0:
                 continue
             for i in range(count):
                 if i < len(a_genes) and i < len(b_genes):
-                    if random.random() < 0.5:
+                    if random.random() < config.CROSSOVER_BLEND_RATE:
+                        child_genes.append(a_genes[i].blend(b_genes[i]))
+                    elif random.random() < 0.5:
                         child_genes.append(a_genes[i].clone())
                     else:
                         child_genes.append(b_genes[i].clone())
@@ -132,15 +144,14 @@ class DNA:
 
     def diversity(self, other: "DNA") -> float:
         """Normalized genome distance: 0 means identical, 1 means no shared gene kinds."""
-        all_kinds = set(GENE_REGISTRY.keys())
         total = len(self.genes) + len(other.genes)
         if total == 0:
             return 0.0
-        diff = 0
-        for k in all_kinds:
-            ca = sum(1 for g in self.genes if g.kind == k)
-            cb = sum(1 for g in other.genes if g.kind == k)
-            diff += abs(ca - cb)
+        # Counter subtraction over the two genomes, instead of rescanning both
+        # gene lists once per registered gene kind.
+        mine = Counter(g.kind for g in self.genes)
+        theirs = Counter(g.kind for g in other.genes)
+        diff = sum(((mine - theirs) + (theirs - mine)).values())
         return diff / total
 
     def signature(self) -> tuple:
@@ -152,7 +163,4 @@ class DNA:
         return species_naming.name_for_dna(self)
 
     def __repr__(self) -> str:
-        counts: dict[str, int] = {}
-        for g in self.genes:
-            counts[g.kind] = counts.get(g.kind, 0) + 1
-        return f"DNA({counts})"
+        return f"DNA({dict(Counter(g.kind for g in self.genes))})"

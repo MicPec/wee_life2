@@ -25,6 +25,10 @@ class JawGene(Gene):
         "digestion": 0.5,
         "prey_threshold": 0.6,
     }
+    param_bounds = {
+        "digestion": (0.0, 1.0),  # above 1.0 eating yields more energy than the food had
+    }
+    wrap_params = frozenset({"angle"})  # signed, so mirrored jaws can evolve
 
     def body_parts(self, base_color):
         return [
@@ -105,12 +109,7 @@ class JawGene(Gene):
                         for vg in venom_genes:
                             dmg_per_tick = vg.params["toxicity"] * (1.0 - resist)
                             duration = vg.params["duration"]
-                            other.venom_stacks.append(
-                                {
-                                    "damage_per_tick": dmg_per_tick,
-                                    "remaining": duration,
-                                }
-                            )
+                            other.add_venom(dmg_per_tick, duration)
                     if other.energy <= 0 and not other.is_dead:
                         other.die(world, cause="combat")
                     break

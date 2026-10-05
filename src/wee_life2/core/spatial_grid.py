@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any, Iterable
 
 
@@ -84,4 +83,4 @@ class SpatialGrid:
         exclude: tuple[Any, ...] = (),
     ) -> int:
         """Count living organisms (other than those in ``exclude``) within ``radius``."""
-        return sum(1 for _ in self.near(position, radius, exclude))
+        return len(self.near(position, radius, exclude))

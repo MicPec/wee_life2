@@ -22,14 +22,14 @@ class FatGene(Gene):
         "size": 5.0,
         "count": 2.0,
     }
-
-    def __init__(self, params=None) -> None:
-        super().__init__(params)
-        self._count = max(1, int(self.params["count"]))
+    param_bounds = {
+        "storage": (0.0, 1.5),  # unbounded storage means an arbitrarily large energy buffer
+        "reserve_factor": (0.0, 1.0),  # above 1.0 hunger can never trigger mobilisation
+    }
 
     def body_parts(self, base_color):
         parts = []
-        for i in range(self._count):
+        for i in range(self.part_count):
             side = 1 if i % 2 == 0 else -1
             row = i // 2
             parts.append(
@@ -47,12 +47,27 @@ class FatGene(Gene):
     def apply(self, organism: Organism, world: World, dt: float) -> None:
         storage = self.params["storage"]
         reserve_factor = self.params["reserve_factor"]
+        ticks = dt * config.TICKS_PER_SECOND
 
-        # Increase max energy capacity
+        # Increase max energy capacity; the reserve limit is shared by all fat
+        # genes (largest storage wins, like max_energy) so mixed-storage
+        # carriers fill one pool instead of truncating each other's deposits.
         organism.max_energy = max(organism.max_energy, config.BASE_ENERGY * (1.0 + storage))
+        organism.fat_capacity = max(organism.fat_capacity, config.BASE_ENERGY * storage)
+        organism.fat_reserve = min(organism.fat_reserve, organism.fat_capacity)
 
-        # When hungry, burn reserves slowly
         hunger = 1.0 - organism.energy / organism.max_energy
-        if hunger > reserve_factor and organism.energy < organism.max_energy:
-            release = storage * hunger * 0.1 * dt * 60.0
-            organism.energy = min(organism.energy + release, organism.max_energy)
+        if organism.energy > organism.max_energy * 0.8:
+            # Deposit surplus into the reserve, losing 30% in conversion.
+            amount = min(
+                0.1 * ticks,
+                organism.energy - organism.max_energy * 0.8,
+                (organism.fat_capacity - organism.fat_reserve) / 0.7,
+            )
+            organism.energy -= amount
+            organism.fat_reserve += amount * 0.7
+        elif hunger > reserve_factor and organism.fat_reserve > 0.0:
+            # Mobilise the reserve; fat only returns energy it previously stored.
+            amount = min(0.1 * ticks, organism.fat_reserve, organism.max_energy - organism.energy)
+            organism.fat_reserve -= amount
+            organism.energy += amount

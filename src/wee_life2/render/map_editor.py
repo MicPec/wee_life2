@@ -7,20 +7,13 @@ import pygame
 from ..core import config
 from ..core.map_storage import MapStorage
 from ..core.world import World
-from .tile_drawing import draw_tile_highlight, draw_tiles
+from .tile_drawing import EDIT_TOOLS, draw_tile_highlight, draw_tiles
 
 
 class MapEditor:
     """Pygame-based editor for drawing walls, hazards and empty tiles."""
 
-    TOOLS = {
-        0: ("empty", config.TILE_EMPTY),
-        1: ("wall", config.TILE_WALL),
-        2: ("radioactive", config.TILE_RADIOACTIVE),
-        3: ("lava", config.TILE_LAVA),
-        4: ("water", config.TILE_WATER),
-        5: ("heal", config.TILE_HEAL),
-    }
+    TOOLS = EDIT_TOOLS
 
     def __init__(
         self,
@@ -81,18 +74,12 @@ class MapEditor:
             self.clear_map()
         elif event.key == pygame.K_r:
             self.randomize()
-        elif event.key == pygame.K_0:
-            self.tool_index = 0
-        elif event.key == pygame.K_1:
-            self.tool_index = 1
-        elif event.key == pygame.K_2:
-            self.tool_index = 2
-        elif event.key == pygame.K_3:
-            self.tool_index = 3
-        elif event.key == pygame.K_4:
-            self.tool_index = 4
-        elif event.key == pygame.K_5:
-            self.tool_index = 5
+        else:
+            # Digit keys select a tool; derived from TOOLS so adding a tile
+            # type does not need a new branch here.
+            index = event.key - pygame.K_0
+            if index in self.TOOLS:
+                self.tool_index = index
 
     def _handle_mouse(self, event: pygame.event.Event) -> None:
         if event.type == pygame.MOUSEBUTTONDOWN:

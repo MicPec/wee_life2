@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import config
+
 
 @dataclass
 class Food:
@@ -17,7 +19,7 @@ class Food:
     decay_time: float = 1500.0
 
     def update(self, dt: float) -> None:
-        self.age += dt * 60.0
+        self.age += dt * config.TICKS_PER_SECOND
 
     @property
     def is_gone(self) -> bool:

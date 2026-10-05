@@ -9,11 +9,17 @@ import pygame
 
 from ..core import config
 
-if config.TILE_SIZE > 0:
-    TILE_RECT_SIZE = config.TILE_SIZE
-else:
-    TILE_RECT_SIZE = 10
-
+# Map-editing tools, shared by the in-simulation edit mode and the standalone
+# map editor so the two cannot drift apart. Index == the digit key that selects
+# the tool; value == (label, tile constant).
+EDIT_TOOLS: dict[int, tuple[str, int]] = {
+    0: ("empty", config.TILE_EMPTY),
+    1: ("wall", config.TILE_WALL),
+    2: ("radioactive", config.TILE_RADIOACTIVE),
+    3: ("lava", config.TILE_LAVA),
+    4: ("water", config.TILE_WATER),
+    5: ("heal", config.TILE_HEAL),
+}
 
 # Tiles whose color varies over time and must be redrawn each frame.
 ANIMATED_TILES = frozenset(

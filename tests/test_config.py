@@ -34,7 +34,16 @@ class TestConfigJson(unittest.TestCase):
         self.assertTrue(config_json.coerce_value("true", True))
         self.assertTrue(config_json.coerce_value("1", True))
         self.assertTrue(config_json.coerce_value("yes", True))
+        self.assertTrue(config_json.coerce_value("ON", True))
         self.assertFalse(config_json.coerce_value("false", True))
+        self.assertFalse(config_json.coerce_value("0", True))
+        self.assertFalse(config_json.coerce_value("off", True))
+
+    def test_coerce_value_bool_rejects_unknown_token(self):
+        """Garbage must not silently become False."""
+        for token in ("banana", "", "2", "truthy"):
+            with self.assertRaises(TypeError, msg=f"{token!r} should be rejected"):
+                config_json.coerce_value(token, True)
 
     def test_coerce_value_int(self):
         self.assertEqual(config_json.coerce_value("42", 0), 42)

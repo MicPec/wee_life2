@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Callable
 
 from .core import config
 from .core.dna import DNA
 from .core.map_storage import MapStorage
 from .core.world import World
 from .render.actions import (
+    Action,
     ClearAction,
     RandomizeAction,
     RemoveAction,
@@ -24,6 +26,11 @@ from .stats import RunLogger
 
 class Simulation:
     """Runs the world and the Pygame renderer together."""
+
+    # Fraction of the world's organism cap seeded at the start of a run, and
+    # how much food is scattered per seeded organism.
+    INITIAL_POPULATION_FRACTION = 0.20
+    INITIAL_FOOD_PER_ORGANISM = 1.4
 
     def __init__(
         self,
@@ -45,30 +52,42 @@ class Simulation:
             height=int(height),
             fps=config.FPS,
         )
-        initial_count = max(1, int(self.world.max_organisms * 0.20))
-        self.world.spawn_organisms(initial_count)
-        self.world.spawn_food(int(initial_count * 1.4))
+        self._seed_population()
+
+    def _seed_population(self) -> None:
+        """Scatter the starting organisms and food onto the current map."""
+        count = max(1, int(self.world.max_organisms * self.INITIAL_POPULATION_FRACTION))
+        self.world.spawn_organisms(count)
+        self.world.spawn_food(int(count * self.INITIAL_FOOD_PER_ORGANISM))
+
+    def _handle_action(self, action: Action) -> None:
+        """Dispatch one renderer action to its handler."""
+        handler = self._ACTION_HANDLERS.get(type(action))
+        if handler is not None:
+            handler(self, action)
+
+    def _on_save(self, _action: Action) -> None:
+        self.storage.save(self.world.save_tiles())
+
+    def _on_clear(self, _action: Action) -> None:
+        self.world.clear_map()
+        self._start_new_run()
+
+    def _on_randomize(self, _action: Action) -> None:
+        self.world.generate_map()
+        self._start_new_run()
+
+    def _on_spawn_random(self, _action: Action) -> None:
+        self.world.spawn_organisms(random.randint(10, 20))
+
+    # Built after the methods above exist; keyed on the exact action type.
+    _ACTION_HANDLERS: dict[type[Action], Callable[["Simulation", Action], None]] = {}
 
     def run(self) -> None:
         while self.renderer.running:
             dt = self.renderer.tick()
             for action in self.renderer.handle_events(self.world):
-                if isinstance(action, SpawnAction):
-                    self.spawn_at(action.pos)
-                elif isinstance(action, RemoveAction):
-                    self.remove_at(action.pos)
-                elif isinstance(action, SaveAction):
-                    self.storage.save(self.world.save_tiles())
-                elif isinstance(action, ClearAction):
-                    self.world.clear_map()
-                    self._start_new_run()
-                elif isinstance(action, RandomizeAction):
-                    self.world.generate_map()
-                    self._start_new_run()
-                elif isinstance(action, SpawnRandomAction):
-                    self.world.spawn_organisms(random.randint(10, 20))
-                elif isinstance(action, ResetAction):
-                    self.reset()
+                self._handle_action(action)
 
             if self.renderer.edit_mode:
                 self.renderer.apply_edits(self.world)
@@ -113,15 +132,23 @@ class Simulation:
         self.renderer.clear_selections()
         self.stats = RunLogger(self.world)
         self.world.run_logger = self.stats
-        initial_count = max(1, int(self.world.max_organisms * 0.20))
-        self.world.spawn_organisms(initial_count)
-        self.world.spawn_food(int(initial_count * 1.4))
+        self._seed_population()
 
     def reset(self) -> None:
         """Reset the simulation: clear organisms/food, keep the map, respawn."""
         self.world.clear_population()
         self.renderer.clear_selections()
-        initial_count = max(1, int(self.world.max_organisms * 0.20))
-        self.world.spawn_organisms(initial_count)
-        self.world.spawn_food(int(initial_count * 1.4))
+        self._seed_population()
         self.stats.log_reset(self.world)
+
+
+# Filled in here because the handlers are unbound methods of the class above.
+Simulation._ACTION_HANDLERS = {
+    SpawnAction: lambda sim, action: sim.spawn_at(action.pos),
+    RemoveAction: lambda sim, action: sim.remove_at(action.pos),
+    SaveAction: Simulation._on_save,
+    ClearAction: Simulation._on_clear,
+    RandomizeAction: Simulation._on_randomize,
+    SpawnRandomAction: Simulation._on_spawn_random,
+    ResetAction: lambda sim, _action: sim.reset(),
+}

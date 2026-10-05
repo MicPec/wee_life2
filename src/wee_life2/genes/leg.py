@@ -6,6 +6,7 @@ import math
 import random
 from typing import TYPE_CHECKING
 
+from ..core import config
 from .base import BodyPartBlueprint, Gene
 from .geometry import angle_diff
 
@@ -25,13 +26,9 @@ class LegGene(Gene):
         "size": 8.0,
     }
 
-    def __init__(self, params=None) -> None:
-        super().__init__(params)
-        self._count = max(1, int(self.params["count"]))
-
     def body_parts(self, base_color):
         parts = []
-        for i in range(self._count):
+        for i in range(self.part_count):
             side = 1 if i % 2 == 0 else -1
             row = i // 2
             parts.append(
@@ -74,5 +71,10 @@ class LegGene(Gene):
         ay = math.sin(organism.angle) * speed
         organism.accelerate(ax, ay)
 
-        cost = (speed * 0.008 + 0.004) * dt * 60.0
+        # Moving costs mass: heavy bodies pay proportionally more per tick.
+        # ENERGY_COST_MOVE is the base rate; the speed term scales the burn.
+        # A MAX_SPEED of 0 (degenerate config) means no thrust is applied, so
+        # it must not crash the cost formula either.
+        speed_ratio = speed / config.MAX_SPEED if config.MAX_SPEED > 0.0 else 0.0
+        cost = config.ENERGY_COST_MOVE * (0.2 + 0.5 * speed_ratio) * organism.mass_ratio * dt * config.TICKS_PER_SECOND
         organism.energy -= cost

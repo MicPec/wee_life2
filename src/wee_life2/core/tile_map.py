@@ -25,6 +25,8 @@ class TileMap:
         self.tile_size = tile_size
         self.cols = int(width / tile_size)
         self.rows = int(height / tile_size)
+        self.max_x = self.cols * tile_size
+        self.max_y = self.rows * tile_size
 
         self.tiles: list[list[int]] = [[self.TILE_EMPTY for _ in range(self.cols)] for _ in range(self.rows)]
         self._obstacles_generated = False
@@ -32,6 +34,12 @@ class TileMap:
     def tile_at(self, position: tuple[float, float]) -> int:
         col = int(position[0] / self.tile_size)
         row = int(position[1] / self.tile_size)
+        # A point exactly on the far edge belongs to the last tile: the grid
+        # covers the closed range [0, max_x] x [0, max_y].
+        if col == self.cols and position[0] <= self.max_x + 1e-6:
+            col = self.cols - 1
+        if row == self.rows and position[1] <= self.max_y + 1e-6:
+            row = self.rows - 1
         if 0 <= col < self.cols and 0 <= row < self.rows:
             return self.tiles[row][col]
         return self.TILE_WALL
@@ -64,6 +72,14 @@ class TileMap:
         r0 = int(y0 / self.tile_size)
         c1 = int(x1 / self.tile_size)
         r1 = int(y1 / self.tile_size)
+        if c0 == self.cols and x0 <= self.max_x + 1e-6:
+            c0 -= 1
+        if r0 == self.rows and y0 <= self.max_y + 1e-6:
+            r0 -= 1
+        if c1 == self.cols and x1 <= self.max_x + 1e-6:
+            c1 -= 1
+        if r1 == self.rows and y1 <= self.max_y + 1e-6:
+            r1 -= 1
 
         if c0 == c1 and r0 == r1:
             yield (c0, r0)
@@ -209,7 +225,7 @@ class TileMap:
                 r += sr
         return None
 
-    def _line_intersects_wall(self, a: tuple[float, float], b: tuple[float, float]) -> bool:
+    def line_crosses_wall(self, a: tuple[float, float], b: tuple[float, float]) -> bool:
         """Return True if the line segment between a and b crosses a wall tile."""
         x0, y0 = a
         x1, y1 = b
@@ -218,6 +234,14 @@ class TileMap:
         r0 = int(y0 / tile_size)
         c1 = int(x1 / tile_size)
         r1 = int(y1 / tile_size)
+        if c0 == self.cols and x0 <= self.max_x + 1e-6:
+            c0 -= 1
+        if r0 == self.rows and y0 <= self.max_y + 1e-6:
+            r0 -= 1
+        if c1 == self.cols and x1 <= self.max_x + 1e-6:
+            c1 -= 1
+        if r1 == self.rows and y1 <= self.max_y + 1e-6:
+            r1 -= 1
         if c0 == c1 and r0 == r1:
             return not (0 <= c0 < self.cols and 0 <= r0 < self.rows) or self.tiles[r0][c0] == self.TILE_WALL
 
@@ -261,6 +285,14 @@ class TileMap:
         r0 = int(y0 / tile_size)
         c1 = int(x1 / tile_size)
         r1 = int(y1 / tile_size)
+        if c0 == self.cols and x0 <= self.max_x + 1e-6:
+            c0 -= 1
+        if r0 == self.rows and y0 <= self.max_y + 1e-6:
+            r0 -= 1
+        if c1 == self.cols and x1 <= self.max_x + 1e-6:
+            c1 -= 1
+        if r1 == self.rows and y1 <= self.max_y + 1e-6:
+            r1 -= 1
         if c0 == c1 and r0 == r1:
             return 0 <= c0 < self.cols and 0 <= r0 < self.rows and self.tiles[r0][c0] in tile_types
 
@@ -384,6 +416,10 @@ class TileMap:
         def _blocked(px: float, py: float) -> bool:
             cx = int(px / tile_size)
             cy = int(py / tile_size)
+            if cx == cols and px <= self.max_x + 1e-6:
+                cx = cols - 1
+            if cy == rows and py <= self.max_y + 1e-6:
+                cy = rows - 1
             if 0 <= cx < cols and 0 <= cy < rows:
                 tile = tiles[cy][cx]
                 return tile == wall or tile in hazards
@@ -409,6 +445,10 @@ class TileMap:
         tiles = self.tiles
         cx = int(x / tile_size)
         cy = int(y / tile_size)
+        if cx == cols and x <= self.max_x + 1e-6:
+            cx = cols - 1
+        if cy == rows and y <= self.max_y + 1e-6:
+            cy = rows - 1
         if 0 <= cx < cols and 0 <= cy < rows:
             if tiles[cy][cx] == self.TILE_WALL:
                 return True
@@ -424,6 +464,10 @@ class TileMap:
             py = y + math.sin(angle) * radius
             cx = int(px / tile_size)
             cy = int(py / tile_size)
+            if cx == cols and px <= self.max_x + 1e-6:
+                cx = cols - 1
+            if cy == rows and py <= self.max_y + 1e-6:
+                cy = rows - 1
             if 0 <= cx < cols and 0 <= cy < rows:
                 if tiles[cy][cx] == self.TILE_WALL:
                     return True
@@ -587,7 +631,7 @@ class TileMap:
                     candidate = ((col + 0.5) * self.tile_size, (row + 0.5) * self.tile_size)
                     d = math.hypot(candidate[0] - position[0], candidate[1] - position[1])
 
-                    if not self._line_intersects_wall(position, candidate):
+                    if not self.line_crosses_wall(position, candidate):
                         if d < best_any_dist:
                             best_any_dist = d
                             best_any = (row, col, candidate)
@@ -602,7 +646,7 @@ class TileMap:
                         if self.tiles[row][col] != self.TILE_EMPTY:
                             continue
                         candidate = ((col + 0.5) * self.tile_size, (row + 0.5) * self.tile_size)
-                        if not self._line_intersects_wall(position, candidate):
+                        if not self.line_crosses_wall(position, candidate):
                             if self.is_empty_circle(candidate, radius):
                                 return candidate
 
@@ -610,7 +654,7 @@ class TileMap:
 
         # Fallback: jump to the nearest empty tile centre regardless of path
         nearest = self.nearest_empty_position(position)
-        if not self._line_intersects_wall(position, nearest):
+        if not self.line_crosses_wall(position, nearest):
             return nearest
 
         # Last resort: small random jitter away from the wall tile centre

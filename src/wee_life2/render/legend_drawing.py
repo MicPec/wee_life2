@@ -8,11 +8,12 @@ inside the legend panel.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 import pygame
 
-
-Kind = str
+# A legend drawer paints one icon: (surface, x, y, size, color).
+LegendDrawer = Callable[[pygame.Surface, int, int, int, tuple[int, int, int]], None]
 
 
 def _draw_legend_body(surface, x, y, size, color):
@@ -242,7 +243,7 @@ def _draw_legend_memory(surface, x, y, size, color):
     pygame.draw.circle(surface, (240, 220, 255), (cx, cy), max(1, r // 3))
 
 
-LEGEND_DRAWERS: dict[Kind, type] = {
+LEGEND_DRAWERS: dict[str, LegendDrawer] = {
     "body": _draw_legend_body,
     "eye": _draw_legend_eye,
     "pincer": _draw_legend_pincer,
@@ -266,7 +267,7 @@ LEGEND_DRAWERS: dict[Kind, type] = {
 
 
 def draw_legend_icon(
-    surface,
+    surface: pygame.Surface,
     x: int,
     y: int,
     size: int,

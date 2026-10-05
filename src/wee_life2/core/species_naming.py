@@ -3,137 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .dna import DNA
 
-
-_LATIN_GENERA = [
-    "Agrum",
-    "Aculeus",
-    "Bestia",
-    "Carnis",
-    "Celer",
-    "Chromis",
-    "Corpus",
-    "Cursor",
-    "Ferox",
-    "Flavum",
-    "Furax",
-    "Gigas",
-    "Lentum",
-    "Lorica",
-    "Lumen",
-    "Magnus",
-    "Mandibula",
-    "Medius",
-    "Minimus",
-    "Mutans",
-    "Nasus",
-    "Oculus",
-    "Olfactus",
-    "Parvus",
-    "Pictus",
-    "Pinguis",
-    "Rapax",
-    "Renatus",
-    "Rubrum",
-    "Sentis",
-    "Spina",
-    "Tactus",
-    "Timidus",
-    "Toxicum",
-    "Venen",
-    "Vibrissus",
-    "Viridis",
-    "Anguis",
-    "Branchia",
-    "Cauda",
-    "Draco",
-    "Echinus",
-    "Fungus",
-    "Glacies",
-    "Grex",
-    "Halitus",
-    "Ignis",
-    "Juba",
-    "Krakenus",
-    "Larva",
-    "Mensura",
-    "Natrix",
-    "Nebula",
-    "Ossa",
-    "Pluma",
-    "Quies",
-    "Radix",
-    "Squama",
-    "Terra",
-    "Turba",
-    "Umbra",
-    "Vesica",
-    "Xenus",
-]
-
-_LATIN_EPITHETS = [
-    "albus",
-    "ater",
-    "aurantiacus",
-    "caeruleus",
-    "crassus",
-    "flavus",
-    "ferox",
-    "gigas",
-    "lentus",
-    "magnus",
-    "medius",
-    "minimus",
-    "mutans",
-    "nanus",
-    "nitens",
-    "obscurus",
-    "pallidus",
-    "parvus",
-    "pinguis",
-    "purpureus",
-    "rapax",
-    "ruber",
-    "rubicundus",
-    "silvestris",
-    "spinosus",
-    "timidus",
-    "toxicus",
-    "velox",
-    "venenosus",
-    "viridis",
-    "violaceus",
-    "vivax",
-    "acutus",
-    "brevis",
-    "durus",
-    "elegans",
-    "fragilis",
-    "gracilis",
-    "horridus",
-    "immensus",
-    "levis",
-    "mobilis",
-    "notabilis",
-    "opacus",
-    "placidus",
-    "quietus",
-    "robustus",
-    "solitarius",
-    "tenuis",
-    "urgens",
-    "validus",
-    "vagus",
-    "amphibius",
-    "aquaticus",
-    "gregarius",
-    "natans",
-    "socialis",
-]
 
 # Latin-ish stems for building genotype-reflecting species names.
 # Each gene kind maps to a short root; top gene -> genus, 2nd/3rd -> epithet.
@@ -184,9 +59,8 @@ def signature_for_dna(dna: "DNA") -> tuple:
     Similar genomes (same dominant gene kinds, similar color and size)
     produce the same signature, so they get the same name.
     """
-    counts: dict[str, int] = {}
-    for g in dna.genes:
-        counts[g.kind] = counts.get(g.kind, 0) + 1
+    counts = Counter(g.kind for g in dna.genes)
+    # Most frequent first, ties broken alphabetically so the name is stable.
     sorted_kinds = [k for k, _ in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
     top = sorted_kinds[0] if sorted_kinds else "body"
     second = sorted_kinds[1] if len(sorted_kinds) > 1 else top
