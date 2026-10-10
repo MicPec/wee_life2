@@ -111,7 +111,7 @@ class JawGene(Gene):
                 armor = getattr(victim, "armor_value", 0.0)
                 damage = max(0.0, strength - armor)
                 victim.energy -= damage
-                organism.energy -= 0.15
+                organism.energy -= config.ENERGY_COST_ATTACK
                 # Inject venom if the attacker has a venom gene
                 venom_genes = [g for g in organism.dna.genes if g.kind == "venom"]
                 if venom_genes:

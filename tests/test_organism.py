@@ -343,6 +343,22 @@ class TestJawGene(unittest.TestCase):
         self.assertLess(prey.energy, 50.0)
         self.assertFalse(prey.is_dead)
 
+    def test_bite_self_cost_comes_from_config(self):
+        """The attacker's per-bite energy cost is config.ENERGY_COST_ATTACK,
+        not a hardcoded literal."""
+        org, jaw = self._biter()
+        self._prey((216.0, 150.0))
+        self._finish_setup(org)
+        original = config.ENERGY_COST_ATTACK
+        config.ENERGY_COST_ATTACK = 3.33
+        try:
+            energy_before = org.energy
+            jaw.apply(org, self.world, 0.0)
+            # The bite path changes nothing else on the attacker.
+            self.assertAlmostEqual(energy_before - org.energy, 3.33, places=6)
+        finally:
+            config.ENERGY_COST_ATTACK = original
+
     def test_jaw_uses_neighbour_cache(self):
         """Bite/prey scanning must go through the per-tick spatial-grid cache
         like the other senses, not the full population list."""

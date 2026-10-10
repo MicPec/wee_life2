@@ -300,7 +300,7 @@ modify `core/config.py`.
 | `ENERGY_GAIN_FROM_FOOD` | `45.0`  | Reserved default food energy value (currently unused; food energy comes from `Food` instances instead)   |
 | `ENERGY_COST_MOVE`      | `0.03`  | Reserved per-move energy cost constant (currently unused; `leg` gene computes its own movement cost)     |
 | `ENERGY_COST_STAY`      | `0.008` | Passive per-tick energy drain applied to every organism regardless of genes                              |
-| `ENERGY_COST_ATTACK`    | `5.0`   | Reserved attack energy cost constant (currently unused; `jaw`/`spike` genes use their own damage params) |
+| `ENERGY_COST_ATTACK`    | `0.15`  | Energy the attacker spends per bite in `jaw` (per tick while biting)                                     |
 | `ENERGY_COST_MATE`      | `20.0`  | Energy deducted from each parent when mating succeeds                                                    |
 | `ENERGY_TO_MATE`        | `35.0`  | Minimum energy an organism needs before it is eligible to mate                                           |
 | `HEAL_ENERGY`           | `2.0`   | Energy restored per tick while standing on a heal tile                                                   |
