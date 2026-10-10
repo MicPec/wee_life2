@@ -55,7 +55,7 @@ class CannibalGene(Gene):
         best_score = -1e9
         best_diff = None
 
-        for other in world.organisms:
+        for other in organism.nearby_organisms(world, range_):
             if other is organism or other.is_dead:
                 continue
             if other.name != organism.name:

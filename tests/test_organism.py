@@ -5,8 +5,11 @@ import unittest
 
 from wee_life2.core import config
 from wee_life2.core.dna import DNA
+from wee_life2.core.food import Food
 from wee_life2.core.organism import Organism
 from wee_life2.core.world import World
+from wee_life2.genes.cannibal import CannibalGene
+from wee_life2.genes.jaw import JawGene
 from wee_life2.genes.leg import LegGene
 
 
@@ -238,6 +241,97 @@ class TestOrganism(unittest.TestCase):
         for _ in range(120):
             organism.update(world, 1.0 / config.FPS)
         self.assertGreater(organism.position[1], organism.radius + 2.0)
+
+
+class TestJawGene(unittest.TestCase):
+    """Jaw reach: the mouth is a point `reach` ahead whose grab radius is
+    the jaw's own aperture (its `size`), not `reach` a second time."""
+
+    def setUp(self):
+        self.world = World(400, 300, tile_size=20)
+        self.world.clear_map()
+
+    def _biter(self, genes=None, aggression=0.9):
+        genes = [JawGene()] if genes is None else genes
+        jaw = next((g for g in genes if isinstance(g, JawGene)), None)
+        org = Organism(DNA(genes), position=(200.0, 150.0))
+        org.angle = 0.0
+        org.aggression = aggression
+        org.energy = 200.0
+        self.world.add_organism(org)
+        return org, jaw
+
+    def _prey(self, position):
+        prey = Organism(DNA([]), position=position)
+        prey.energy = 50.0  # below biter.energy * prey_threshold (200 * 0.6)
+        self.world.add_organism(prey)
+        return prey
+
+    def _finish_setup(self, org):
+        self.world._rebuild_spatial_grid()
+        org.drives.clear()
+        org._nearby_organisms = None
+
+    # With defaults (reach=12, size=7) the mouth sits at x=212 and the old
+    # disc reached it out to x=230; the aperture band is x=212 +/- (7+r).
+
+    def test_jaw_does_not_eat_food_behind_it(self):
+        org, jaw = self._biter(aggression=0.0)
+        food = Food(position=(196.0, 150.0))  # 16 behind the mouth; old disc grabbed it
+        self.world.add_food(food)
+        self._finish_setup(org)
+        energy_before = org.energy
+        jaw.apply(org, self.world, 0.0)
+        self.assertIn(food, self.world.food)
+        self.assertEqual(org.energy, energy_before)
+
+    def test_jaw_eats_food_in_front(self):
+        org, jaw = self._biter(aggression=0.0)
+        food = Food(position=(218.0, 150.0))  # 6 ahead of the mouth, inside aperture
+        self.world.add_food(food)
+        self._finish_setup(org)
+        energy_before = org.energy
+        jaw.apply(org, self.world, 0.0)
+        self.assertNotIn(food, self.world.food)
+        self.assertGreater(org.energy, energy_before)
+
+    def test_jaw_bite_range_is_not_doubled(self):
+        """Prey inside the old 2x-reach band but outside the aperture must
+        not be bitten."""
+        org, jaw = self._biter()
+        prey = self._prey((228.0, 150.0))  # 16 from the mouth; old band reached to ~17
+        self._finish_setup(org)
+        jaw.apply(org, self.world, 0.0)
+        self.assertEqual(prey.energy, 50.0)
+        self.assertFalse(prey.is_dead)
+
+    def test_jaw_still_bites_prey_at_the_mouth(self):
+        org, jaw = self._biter()
+        prey = self._prey((216.0, 150.0))  # 4 from the mouth, inside aperture
+        self._finish_setup(org)
+        jaw.apply(org, self.world, 0.0)
+        self.assertLess(prey.energy, 50.0)
+        self.assertFalse(prey.is_dead)
+
+    def test_jaw_uses_neighbour_cache(self):
+        """Bite/prey scanning must go through the per-tick spatial-grid cache
+        like the other senses, not the full population list."""
+        org, jaw = self._biter()
+        self._prey((216.0, 150.0))
+        self._finish_setup(org)
+        self.assertIsNone(org._nearby_organisms)
+        jaw.apply(org, self.world, 0.0)
+        self.assertIsNotNone(org._nearby_organisms)
+
+    def test_cannibal_uses_neighbour_cache(self):
+        gene = CannibalGene()
+        org = Organism(DNA([gene]), position=(200.0, 150.0))
+        org.angle = 0.0
+        self.world.add_organism(org)
+        self._finish_setup(org)
+        self.assertIsNone(org._nearby_organisms)
+        gene.apply(org, self.world, 0.0)
+        self.assertIsNotNone(org._nearby_organisms)
 
 
 if __name__ == "__main__":
