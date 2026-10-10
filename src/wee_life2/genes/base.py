@@ -77,6 +77,12 @@ class Gene:
         # valid by construction, not only after a mutation round.
         for key in self.params:
             self.params[key] = self._constrain(key, self.params[key])
+        # A freshly created gene (no inherited value) gets a random body side
+        # so founder organisms are visually varied.  Children inherit it
+        # through clone()/blend() like any other parameter -- this is the same
+        # shape as EyeGene's handling of an uninherited `direction`.
+        if "side" in self.default_params and (not params or "side" not in params):
+            self.params["side"] = random.random()
 
     @property
     def part_count(self) -> int:
@@ -88,6 +94,18 @@ class Gene:
         single part rather than raising ``KeyError``.
         """
         return max(1, int(self.params.get("count", 1)))
+
+    @property
+    def side(self) -> int:
+        """Body side (+1/-1) expressed by the heritable ``side`` parameter.
+
+        Derived from the live parameter rather than randomised per instance:
+        ``Gene.clone()`` rebuilds from ``params`` alone, so an
+        ``__init__``-time random side re-rolled on every clone and a child's
+        body layout never matched its parent's.  Genes without a ``side``
+        parameter express the +1 side.
+        """
+        return 1 if self.params.get("side", 1.0) >= 0.5 else -1
 
     def body_parts(self, base_color: tuple[int, int, int]) -> list[BodyPartBlueprint]:
         """Return the body parts this gene contributes to the organism."""

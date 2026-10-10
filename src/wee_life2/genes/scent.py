@@ -34,19 +34,19 @@ class ScentGene(Gene):
         "heal_weight": 0.5,
         "heal_threshold": 0.7,
         "terrain_rays": 5.0,
+        "side": 0.5,  # 0-1, body side the organ sits on (thresholded at 0.5)
     }
-
-    def __init__(self, params=None) -> None:
-        super().__init__(params)
-        self._side = 1 if random.random() > 0.5 else -1
+    param_bounds = {
+        "side": (0.0, 1.0),
+    }
 
     def body_parts(self, base_color):
         size = 2 + self.params["precision"] * 4
         return [
             BodyPartBlueprint(
                 kind="scent",
-                offset=(self._side * (4 + size), -8),
-                angle=0.3 * self._side,
+                offset=(self.side * (4 + size), -8),
+                angle=0.3 * self.side,
                 size=size,
                 color=hsv_to_rgb(0.8, 0.6, 0.9),
                 params={"range": self.params["range"]},

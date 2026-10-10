@@ -1,6 +1,7 @@
 """Regression tests for the core genetic machinery and energy budget."""
 
 import math
+import random
 import unittest
 
 from wee_life2.core import config
@@ -124,6 +125,65 @@ class TestHeritability(unittest.TestCase):
         for _ in range(20):
             clone = parent.clone()
             self.assertEqual(len(clone.body_parts((0, 0, 0))), expected)
+
+    def test_gene_side_is_heritable(self):
+        """clone() rebuilds from params alone, so body side must live in
+        params or it re-rolls on every clone."""
+        covered = [k for k, c in GENE_REGISTRY.items() if "side" in c.default_params]
+        self.assertEqual(len(covered), 8, msg=f"side-carrying genes changed: {covered}")
+        for kind, gene_cls in GENE_REGISTRY.items():
+            if "side" not in gene_cls.default_params:
+                continue
+            gene = gene_cls()
+            clone = gene.clone()
+            self.assertEqual(clone.params["side"], gene.params["side"], msg=kind)
+            self.assertEqual(clone.side, gene.side, msg=kind)
+
+    def test_fresh_genes_get_random_sides(self):
+        """Founders must still vary: a gene created without an inherited
+        `side` randomises it rather than defaulting to 0.5."""
+        sides = {GENE_REGISTRY["eye"]().side for _ in range(60)}
+        self.assertEqual(sides, {1, -1})
+
+    def test_side_survives_blend_and_mutation(self):
+        gene = GENE_REGISTRY["eye"]()
+        for _ in range(500):
+            gene.mutate(rate=1.0, strength=1.0)
+            self.assertGreaterEqual(gene.params["side"], 0.0)
+            self.assertLessEqual(gene.params["side"], 1.0)
+        a = GENE_REGISTRY["eye"]({"side": 0.1})
+        b = GENE_REGISTRY["eye"]({"side": 0.9})
+        child = a.blend(b)
+        self.assertGreaterEqual(child.params["side"], 0.0)
+        self.assertLessEqual(child.params["side"], 1.0)
+
+    def test_body_layout_is_reproducible_from_dna(self):
+        """A cloned genome must rebuild the same body-part layout.
+
+        Colours are excluded on purpose: _build_body() calls random_color()
+        when the genome has no color gene, so colours legitimately differ."""
+        dna = DNA(
+            [
+                GENE_REGISTRY[kind]({"direction": 0.0} if kind == "eye" else {})
+                for kind in (
+                    "eye",
+                    "scent",
+                    "fear",
+                    "memory",
+                    "venom",
+                    "touch",
+                    "toxin_gland",
+                    "pheromone",
+                )
+            ]
+        )
+        expected = sorted(bp.blueprint.offset for bp in Organism(dna).body_parts)
+        # Seed each clone so a pre-fix all-same-side streak can't fluke a pass.
+        for i in range(20):
+            random.seed(i)
+            clone = Organism(dna.clone())
+            actual = sorted(bp.blueprint.offset for bp in clone.body_parts)
+            self.assertEqual(actual, expected)
 
     def test_mutated_count_expresses_immediately(self):
         """A count changed after construction (mutation/blend) must show up in

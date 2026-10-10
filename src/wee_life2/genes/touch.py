@@ -23,19 +23,19 @@ class TouchGene(Gene):
         "sensitivity": 1.0,
         "hazard_weight": 1.5,
         "size": 3.0,
+        "side": 0.5,  # 0-1, body side the whiskers sit on (thresholded at 0.5)
     }
-
-    def __init__(self, params=None) -> None:
-        super().__init__(params)
-        self._side = 1 if random.random() > 0.5 else -1
+    param_bounds = {
+        "side": (0.0, 1.0),
+    }
 
     def body_parts(self, base_color):
         size = self.params["size"]
         return [
             BodyPartBlueprint(
                 kind="touch",
-                offset=(self._side * 4, -6),
-                angle=0.2 * self._side,
+                offset=(self.side * 4, -6),
+                angle=0.2 * self.side,
                 size=size,
                 color=(230, 230, 150),
                 params={"range": self.params["range"]},

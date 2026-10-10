@@ -32,13 +32,15 @@ class EyeGene(Gene):
         "water_weight": 0.4,
         "terrain_rays": 3.0,
         "direction": 0.0,  # radians offset from the organism's forward angle
+        "side": 0.5,  # 0-1, body side the eye sits on (thresholded at 0.5)
+    }
+    param_bounds = {
+        "side": (0.0, 1.0),
     }
     wrap_params = frozenset({"direction"})  # signed, so eyes can evolve to point sideways
 
     def __init__(self, params=None) -> None:
         super().__init__(params)
-        # Randomise which side the eye sits on
-        self._side = 1 if random.random() > 0.5 else -1
         # Give freshly-created eyes (no inherited "direction") a random facing
         # so that multiple eyes on the same organism can look different ways.
         if not params or "direction" not in params:
@@ -52,7 +54,7 @@ class EyeGene(Gene):
         return [
             BodyPartBlueprint(
                 kind="eye",
-                offset=(self._side * (size + 3), -4),
+                offset=(self.side * (size + 3), -4),
                 angle=direction,
                 size=size,
                 color=hsv_to_rgb(hue, 0.8, 0.9),

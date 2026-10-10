@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import random
 from typing import TYPE_CHECKING
 
 from ..core import config
@@ -37,18 +36,18 @@ class MemoryGene(Gene):
         "heal_weight": 0.5,
         "heal_threshold": 0.7,
         "size": 4.0,
+        "side": 0.5,  # 0-1, body side the organ sits on (thresholded at 0.5)
     }
-
-    def __init__(self, params=None) -> None:
-        super().__init__(params)
-        self._side = 1 if random.random() > 0.5 else -1
+    param_bounds = {
+        "side": (0.0, 1.0),
+    }
 
     def body_parts(self, base_color):
         size = self.params["size"]
         return [
             BodyPartBlueprint(
                 kind="memory",
-                offset=(self._side * 5, -6),
+                offset=(self.side * 5, -6),
                 size=size,
                 color=hsv_to_rgb(0.8, 0.5, 0.95),
                 params={},

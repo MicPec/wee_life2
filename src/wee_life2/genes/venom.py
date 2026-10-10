@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 from typing import TYPE_CHECKING
 
 from .base import BodyPartBlueprint, Gene, hsv_to_rgb
@@ -25,17 +24,17 @@ class VenomGene(Gene):
         "toxicity": 0.8,
         "duration": 60.0,
         "size": 5.0,
+        "side": 0.5,  # 0-1, body side the organ sits on (thresholded at 0.5)
     }
-
-    def __init__(self, params=None) -> None:
-        super().__init__(params)
-        self._side = 1 if random.random() > 0.5 else -1
+    param_bounds = {
+        "side": (0.0, 1.0),
+    }
 
     def body_parts(self, base_color):
         return [
             BodyPartBlueprint(
                 kind="venom",
-                offset=(self._side * 6, 4),
+                offset=(self.side * 6, 4),
                 angle=0.0,
                 size=self.params["size"],
                 color=hsv_to_rgb(0.33, 0.9, 0.7),

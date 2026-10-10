@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 from typing import TYPE_CHECKING
 
 from ..core import config
@@ -25,17 +24,17 @@ class PheromoneGene(Gene):
         "range": 100.0,
         "cost": 0.05,
         "size": 4.0,
+        "side": 0.5,  # 0-1, body side the gland sits on (thresholded at 0.5)
     }
-
-    def __init__(self, params=None) -> None:
-        super().__init__(params)
-        self._side = 1 if random.random() > 0.5 else -1
+    param_bounds = {
+        "side": (0.0, 1.0),
+    }
 
     def body_parts(self, base_color):
         return [
             BodyPartBlueprint(
                 kind="pheromone",
-                offset=(self._side * 6, 6),
+                offset=(self.side * 6, 6),
                 angle=0.0,
                 size=self.params["size"],
                 color=(230, 120, 200),

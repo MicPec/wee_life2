@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import random
 from typing import TYPE_CHECKING
 
 from .base import BodyPartBlueprint, Gene
@@ -25,18 +24,18 @@ class FearGene(Gene):
         "alarm_range": 130.0,  # radius for sensing panicking kin
         "alarm_sensitivity": 0.6,  # how strongly secondhand kin alarm is trusted
         "size": 4.0,
+        "side": 0.5,  # 0-1, body side the organ sits on (thresholded at 0.5)
     }
-
-    def __init__(self, params=None) -> None:
-        super().__init__(params)
-        self._side = 1 if random.random() > 0.5 else -1
+    param_bounds = {
+        "side": (0.0, 1.0),
+    }
 
     def body_parts(self, base_color):
         return [
             BodyPartBlueprint(
                 kind="fear",
-                offset=(self._side * 7, -2),
-                angle=0.5 * self._side,
+                offset=(self.side * 7, -2),
+                angle=0.5 * self.side,
                 size=self.params["size"],
                 color=(240, 200, 80),
                 params={"range": self.params["range"]},
