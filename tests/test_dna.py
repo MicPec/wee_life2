@@ -6,6 +6,7 @@ import subprocess
 import sys
 import unittest
 
+from wee_life2.core import config
 from wee_life2.core.dna import DNA
 from wee_life2.genes import GENE_REGISTRY
 
@@ -45,6 +46,41 @@ class TestDNA(unittest.TestCase):
                 break
         else:
             self.fail("Mutation did not change any gene parameters after 100 attempts")
+
+    def test_insertion_mutation_respects_spawn_weights(self):
+        """Insertion must use GENE_SPAWN_WEIGHTS, not a flat pick -- otherwise
+        structural mutation reintroduces deliberately rare genes at a uniform
+        rate."""
+        original_weights = config.GENE_SPAWN_WEIGHTS
+        original_default = config.GENE_DEFAULT_SPAWN_WEIGHT
+        try:
+            config.GENE_SPAWN_WEIGHTS = {kind: 0.0 for kind in GENE_REGISTRY}
+            config.GENE_SPAWN_WEIGHTS["jaw"] = 1.0
+            config.GENE_DEFAULT_SPAWN_WEIGHT = 0.0
+            for _ in range(50):
+                dna = DNA([GENE_REGISTRY["leg"]()])
+                dna.mutate(rate=0.0, strength=0.0, insertion_rate=1.0, deletion_rate=0.0)
+                inserted = [g.kind for g in dna.genes if g.kind != "leg"]
+                self.assertEqual(inserted, ["jaw"])
+        finally:
+            config.GENE_SPAWN_WEIGHTS = original_weights
+            config.GENE_DEFAULT_SPAWN_WEIGHT = original_default
+
+    def test_random_genome_respects_spawn_weights(self):
+        """The founder-genome path shares the same weighted pick."""
+        original_weights = config.GENE_SPAWN_WEIGHTS
+        original_default = config.GENE_DEFAULT_SPAWN_WEIGHT
+        try:
+            config.GENE_SPAWN_WEIGHTS = {kind: 0.0 for kind in GENE_REGISTRY}
+            config.GENE_SPAWN_WEIGHTS["jaw"] = 1.0
+            config.GENE_DEFAULT_SPAWN_WEIGHT = 0.0
+            for _ in range(20):
+                dna = DNA.random(length=6)
+                self.assertTrue(dna.genes)
+                self.assertTrue(all(g.kind == "jaw" for g in dna.genes))
+        finally:
+            config.GENE_SPAWN_WEIGHTS = original_weights
+            config.GENE_DEFAULT_SPAWN_WEIGHT = original_default
 
     def test_clone_is_equal(self):
         dna = DNA.random()

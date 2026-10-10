@@ -13,6 +13,22 @@ from . import config
 from . import species_naming
 
 
+def _random_gene_kind() -> str:
+    """Pick a gene kind honouring `config.GENE_SPAWN_WEIGHTS`.
+
+    Shared by `DNA.random` and `DNA.mutate`'s insertion path: a flat pick in
+    either place would let structural mutation reintroduce deliberately rare
+    genes (`asexual`, `spike`, `cannibal`) at a uniform rate.
+    """
+    kinds = list(GENE_REGISTRY.keys())
+    weights = [config.GENE_SPAWN_WEIGHTS.get(k, config.GENE_DEFAULT_SPAWN_WEIGHT) for k in kinds]
+    if sum(weights) <= 0.0:
+        # Degenerate config (all weights zeroed via --config-file): fall back
+        # to a uniform pick instead of letting random.choices raise.
+        return random.choice(kinds)
+    return random.choices(kinds, weights=weights, k=1)[0]
+
+
 @dataclass
 class DNA:
     """A genome is a list of gene instances.
@@ -34,15 +50,12 @@ class DNA:
     @classmethod
     def random(cls, length: int = 12) -> "DNA":
         """Create a random genome with a variable number of genes."""
-        kinds = list(GENE_REGISTRY.keys())
-        weights = [config.GENE_SPAWN_WEIGHTS.get(k, config.GENE_DEFAULT_SPAWN_WEIGHT) for k in kinds]
         genes = []
         max_len = min(length, config.MAX_GENES)
         min_len = min(4, max_len)
         actual_length = random.randint(min_len, max_len)
         for _ in range(actual_length):
-            kind = random.choices(kinds, weights=weights, k=1)[0]
-            gene_cls = GENE_REGISTRY[kind]
+            gene_cls = GENE_REGISTRY[_random_gene_kind()]
             genes.append(gene_cls())
         return cls(genes)
 
@@ -72,7 +85,7 @@ class DNA:
 
         # Structural mutations
         if len(self.genes) < config.MAX_GENES and random.random() < insertion_rate:
-            kind = random.choice(list(GENE_REGISTRY.keys()))
+            kind = _random_gene_kind()
             idx = random.randint(0, len(self.genes))
             self.genes.insert(idx, GENE_REGISTRY[kind]())
 
