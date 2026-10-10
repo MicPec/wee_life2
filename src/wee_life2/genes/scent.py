@@ -64,7 +64,7 @@ class ScentGene(Gene):
         precision = max(0.05, self.params["precision"])
 
         best = None
-        best_score = -1e9
+        best_score = 0.0
 
         is_amphibious = organism.amphibious
         has_metabolism = organism.has_metabolism
@@ -140,7 +140,11 @@ class ScentGene(Gene):
                 and other.aggression > threshold
                 and other.energy > org_energy * 0.8
             ):
-                s = danger_weight * (1 - dist * range_inv)
+                # Rank on the magnitude so the *nearest* danger wins and
+                # positive food/mate scores can't suppress it; the negative
+                # `danger_weight` still carries the repulsion at emit time
+                # (see the steering sign convention in AGENTS.md).
+                s = abs(danger_weight) * (1 - dist * range_inv)
                 if s > best_score:
                     best_score = s
                     diff = angle_diff(angle_to(pos, other_pos), org_angle)

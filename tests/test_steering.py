@@ -11,10 +11,15 @@ import unittest
 
 from wee_life2.core import config
 from wee_life2.core.dna import DNA
+from wee_life2.core.food import Food
+from wee_life2.core.geometry import angle_diff
 from wee_life2.core.organism import Organism
 from wee_life2.core.world import World
+from wee_life2.genes.eye import EyeGene
 from wee_life2.genes.fear import FearGene
 from wee_life2.genes.geometry import steer_away, steer_toward
+from wee_life2.genes.metabolism import MetabolismGene
+from wee_life2.genes.scent import ScentGene
 
 
 def heading_error_to(organism: Organism, target: tuple[float, float]) -> float:
@@ -23,6 +28,11 @@ def heading_error_to(organism: Organism, target: tuple[float, float]) -> float:
 
     desired = organism.angle + organism.combined_drive()
     return abs(angle_diff(desired, angle_to(organism.position, target)))
+
+
+def resulting_heading(org: Organism) -> float:
+    """Absolute heading the organism's combined drives are steering toward."""
+    return org.angle + org.combined_drive()
 
 
 class TestSteeringHelpers(unittest.TestCase):
@@ -110,6 +120,109 @@ class TestFearFlees(unittest.TestCase):
         gene.apply(prey, self.world, 1.0 / config.FPS)
         self.assertTrue(prey.drives, "secondhand alarm should produce a drive")
         self.assertGreater(heading_error_to(prey, kin.position), math.pi / 2.0)
+
+
+class TestSenseThreatSelection(unittest.TestCase):
+    """eye/scent must flee the *nearest* threat, even with food in view."""
+
+    CENTER = (400.0, 400.0)
+
+    def setUp(self):
+        self.world = World(800, 800, tile_size=20)
+        self.world.clear_map()
+
+    @staticmethod
+    def _bearing_pos(bearing: float, dist: float) -> tuple[float, float]:
+        return (
+            400.0 + dist * math.cos(bearing),
+            400.0 + dist * math.sin(bearing),
+        )
+
+    def _sensing_organism(self, genes):
+        org = Organism(DNA(genes), position=self.CENTER)
+        org.angle = 0.0
+        org.aggression = 0.0
+        self.world.add_organism(org)
+        return org
+
+    def _threat(self, bearing: float, dist: float) -> Organism:
+        threat = Organism(DNA([]), position=self._bearing_pos(bearing, dist))
+        threat.aggression = 0.9
+        self.world.add_organism(threat)
+        return threat
+
+    def _finish_setup(self, org):
+        self.world._rebuild_spatial_grid()
+        org.drives.clear()
+        org._nearby_organisms = None
+
+    def _eye(self) -> EyeGene:
+        return EyeGene({"range": 200.0, "fov": 2.4, "terrain_rays": 0.0, "direction": 0.0})
+
+    def _scent(self) -> ScentGene:
+        # precision=1.0 makes angle_noise() exactly zero, so the emitted
+        # bearing is deterministic.
+        return ScentGene({"range": 200.0, "terrain_rays": 0.0, "precision": 1.0})
+
+    def test_eye_flees_nearest_threat(self):
+        gene = self._eye()
+        org = self._sensing_organism([gene])
+        self._threat(-0.5, 40.0)
+        self._threat(0.5, 180.0)
+        self._finish_setup(org)
+
+        gene.apply(org, self.world, 1.0 / config.FPS)
+        self.assertEqual(org.seen_target, "threat")
+        self.assertLess(
+            abs(angle_diff(resulting_heading(org), -0.5 + math.pi)),
+            0.1,
+            msg="eye must flee the near threat, not the farthest one",
+        )
+
+    def test_eye_threat_not_suppressed_by_food(self):
+        gene = self._eye()
+        org = self._sensing_organism([gene, MetabolismGene()])
+        self._threat(0.0, 30.0)
+        self.world.add_food(Food(position=self._bearing_pos(0.9, 150.0)))
+        self._finish_setup(org)
+
+        gene.apply(org, self.world, 1.0 / config.FPS)
+        self.assertEqual(org.seen_target, "threat")
+        self.assertLess(
+            abs(angle_diff(resulting_heading(org), math.pi)),
+            0.1,
+            msg="a visible food item must not suppress the threat response",
+        )
+
+    def test_scent_flees_nearest_threat(self):
+        gene = self._scent()
+        org = self._sensing_organism([gene])
+        self._threat(-0.5, 40.0)
+        self._threat(0.5, 180.0)
+        self._finish_setup(org)
+
+        gene.apply(org, self.world, 1.0 / config.FPS)
+        self.assertEqual(org.seen_target, "danger")
+        self.assertLess(
+            abs(angle_diff(resulting_heading(org), -0.5 + math.pi)),
+            0.1,
+            msg="scent must flee the near threat, not the farthest one",
+        )
+
+    def test_scent_danger_not_suppressed_by_food(self):
+        gene = self._scent()
+        org = self._sensing_organism([gene, MetabolismGene()])
+        self._threat(0.0, 30.0)
+        self.world.add_food(Food(position=self._bearing_pos(0.9, 150.0)))
+        self._finish_setup(org)
+
+        gene.apply(org, self.world, 1.0 / config.FPS)
+        self.assertEqual(org.seen_target, "danger")
+        self.assertLess(
+            abs(angle_diff(resulting_heading(org), math.pi)),
+            0.1,
+            msg="a smelt food item must not suppress the danger response",
+        )
 
 
 class TestHealTile(unittest.TestCase):

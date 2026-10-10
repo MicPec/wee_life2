@@ -74,7 +74,7 @@ class EyeGene(Gene):
         range_inv = 1.0 / range_
         acuity = self.params["acuity"]
         best = None
-        best_score = -1e9
+        best_score = 0.0
 
         is_amphibious = organism.amphibious
         has_metabolism = organism.has_metabolism
@@ -145,7 +145,11 @@ class EyeGene(Gene):
             # Look for threats
             # Only flee from genuinely dangerous organisms, not a jaw count of one.
             if other.aggression > org_aggression * 1.2 and other.aggression > aggression_threshold:
-                score = threat_weight * (1 - dist * range_inv)
+                # Rank on the magnitude so the *nearest* threat wins and
+                # positive food/mate scores can't suppress it; the negative
+                # `threat_weight` still carries the repulsion at emit time
+                # (see the steering sign convention in AGENTS.md).
+                score = abs(threat_weight) * (1 - dist * range_inv)
                 if score > best_score:
                     best_score = score
                     best = (direction_diff(other_pos), "threat", threat_weight)
