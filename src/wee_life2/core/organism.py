@@ -345,7 +345,7 @@ class Organism:
             if stack.remaining <= 0:
                 continue  # expired: drop it
             active.append(stack)
-            self.energy -= stack.damage_per_tick
+            self.energy -= stack.damage_per_tick * ticks
             if self.energy <= 0 and not self.is_dead:
                 # Keep the stacks handled so far plus the ones not yet visited.
                 self.venom_stacks = active + self.venom_stacks[index + 1 :]

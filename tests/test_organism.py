@@ -144,6 +144,36 @@ class TestOrganism(unittest.TestCase):
         organism.update(self.world, 1.0)
         self.assertGreater(organism.energy, energy_before)
 
+    def test_venom_damage_scales_with_dt(self):
+        """Venom drains damage_per_tick * ticks per call, like every other
+        drain in the file -- a 2-tick step must cost 2x damage."""
+        organism = Organism(DNA([]), (100.0, 100.0))
+        organism.energy = 100.0
+        organism.add_venom(damage_per_tick=2.0, duration=10.0)
+        organism._process_venom(self.world, 2.0 / config.TICKS_PER_SECOND)
+        self.assertAlmostEqual(100.0 - organism.energy, 4.0, places=6)
+
+    def test_venom_total_damage_is_dt_invariant(self):
+        """Same stack, different step sizes: total damage must match (to
+        within one step's worth -- an expiring stack is dropped before its
+        final partial damage, which is a known off-by-one)."""
+        a = Organism(DNA([]), (100.0, 100.0))
+        b = Organism(DNA([]), (100.0, 100.0))
+        for org in (a, b):
+            org.energy = 200.0
+            org.add_venom(damage_per_tick=1.5, duration=6.0)
+        one_tick = 1.0 / config.TICKS_PER_SECOND
+        while a.venom_stacks:
+            a._process_venom(self.world, one_tick)
+        while b.venom_stacks:
+            b._process_venom(self.world, 2 * one_tick)
+        self.assertAlmostEqual(
+            200.0 - a.energy,
+            200.0 - b.energy,
+            delta=1.5 * 2.0,  # one 2-tick step's worth of damage
+            msg="total venom damage must be dt-invariant to within one step",
+        )
+
     def test_leg_age_slowdown(self):
         """Older organisms move slower than young ones."""
         dna = DNA([LegGene({"strength": 0.5, "agility": 1.0})])
