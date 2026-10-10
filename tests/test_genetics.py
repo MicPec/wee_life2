@@ -8,6 +8,7 @@ from wee_life2.core.dna import DNA
 from wee_life2.core.organism import Organism
 from wee_life2.core.world import World
 from wee_life2.genes import GENE_REGISTRY
+from wee_life2.genes.asexual import AsexualGene
 from wee_life2.genes.base import Gene
 from wee_life2.genes.fat import FatGene
 from wee_life2.genes.metabolism import MetabolismGene
@@ -77,6 +78,30 @@ class TestMutation(unittest.TestCase):
         self.assertLessEqual(abs(eye.params["direction"]), math.pi)
         fear = GENE_REGISTRY["fear"]({"danger_weight": 1.8})
         self.assertEqual(fear.params["danger_weight"], 0.0)
+
+    def test_asexual_constructor_sanitizes_out_of_domain_params(self):
+        """Reproduction limiters loaded or hand-written to zero must be
+        clamped back into bounds, same as mutated ones."""
+        gene = AsexualGene({"cooldown": 0.0, "energy_cost": 0.0, "mutation_multiplier": 0.0})
+        self.assertEqual(gene.params["cooldown"], 100.0)
+        self.assertEqual(gene.params["energy_cost"], float(config.ENERGY_COST_MATE))
+        self.assertEqual(gene.params["mutation_multiplier"], 0.5)
+
+    def test_asexual_bounds_survive_mutation_pressure(self):
+        """Unbounded, cooldown/energy_cost can mutate to zero and bypass the
+        density check and cost guard entirely."""
+        gene = AsexualGene()
+        for _ in range(500):
+            gene.mutate(rate=1.0, strength=1.0)
+            self.assertGreaterEqual(gene.params["cooldown"], 100.0)
+            self.assertLessEqual(gene.params["cooldown"], 5000.0)
+            self.assertGreaterEqual(gene.params["energy_cost"], float(config.ENERGY_COST_MATE))
+            self.assertLessEqual(gene.params["energy_cost"], 400.0)
+            self.assertGreaterEqual(gene.params["mutation_multiplier"], 0.5)
+            self.assertLessEqual(gene.params["mutation_multiplier"], 5.0)
+            # __init__ calls random.uniform(0.0, self._effective_cooldown());
+            # a non-positive cooldown would be a latent crash/degenerate timer.
+            self.assertGreater(gene._effective_cooldown(), 0.0)
 
     def test_repulsive_weights_keep_their_sign(self):
         gene = GENE_REGISTRY["eye"]()

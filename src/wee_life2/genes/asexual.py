@@ -30,6 +30,19 @@ class AsexualGene(Gene):
         "mutation_multiplier": 1.5,
         "size": 5.0,
     }
+    param_bounds = {
+        # A zero cooldown means a clone attempt every single tick, which
+        # defeats the density check below; a huge one just makes the gene
+        # inert, which is self-limiting but still worth bounding.
+        "cooldown": (100.0, 5000.0),
+        # At zero cost the `energy < cost * 1.25` guard never fires and
+        # cloning becomes free.  Floor it at the per-parent cost of sexual
+        # reproduction so asexual reproduction is never the cheaper option.
+        "energy_cost": (float(config.ENERGY_COST_MATE), 400.0),
+        # Feeds `MUTATION_RATE * multiplier`; above ~10x the effective rate
+        # exceeds 1.0 and every parameter mutates on every clone.
+        "mutation_multiplier": (0.5, 5.0),
+    }
 
     def __init__(self, params=None) -> None:
         super().__init__(params)
