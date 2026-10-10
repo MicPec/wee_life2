@@ -294,16 +294,16 @@ modify `core/config.py`.
 
 ### Energy
 
-| Constant                | Default | Meaning                                                                                                  |
-| ----------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
-| `BASE_ENERGY`           | `160.0` | Starting energy and baseline for `max_energy` (`1.5×`) at birth                                          |
-| `ENERGY_GAIN_FROM_FOOD` | `45.0`  | Reserved default food energy value (currently unused; food energy comes from `Food` instances instead)   |
-| `ENERGY_COST_MOVE`      | `0.03`  | Reserved per-move energy cost constant (currently unused; `leg` gene computes its own movement cost)     |
-| `ENERGY_COST_STAY`      | `0.008` | Passive per-tick energy drain applied to every organism regardless of genes                              |
-| `ENERGY_COST_ATTACK`    | `0.15`  | Energy the attacker spends per bite in `jaw` (per tick while biting)                                     |
-| `ENERGY_COST_MATE`      | `20.0`  | Energy deducted from each parent when mating succeeds                                                    |
-| `ENERGY_TO_MATE`        | `35.0`  | Minimum energy an organism needs before it is eligible to mate                                           |
-| `HEAL_ENERGY`           | `2.0`   | Energy restored per tick while standing on a heal tile                                                   |
+| Constant                | Default | Meaning                                                                                                     |
+| ----------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| `BASE_ENERGY`           | `160.0` | Starting energy and baseline for `max_energy` (`1.5×`) at birth                                             |
+| `ENERGY_GAIN_FROM_FOOD` | `45.0`  | Upper bound of ambient food spawns; `World` scatters food worth `random.uniform(25, ENERGY_GAIN_FROM_FOOD)` |
+| `ENERGY_COST_MOVE`      | `0.03`  | Base energy cost per tick while moving; `leg` scales it by speed ratio and body mass                        |
+| `ENERGY_COST_STAY`      | `0.008` | Passive per-tick energy drain applied to every organism regardless of genes                                 |
+| `ENERGY_COST_ATTACK`    | `0.15`  | Energy the attacker spends per bite in `jaw` (per tick while biting)                                        |
+| `ENERGY_COST_MATE`      | `20.0`  | Energy deducted from each parent when mating succeeds                                                       |
+| `ENERGY_TO_MATE`        | `35.0`  | Minimum energy an organism needs before it is eligible to mate                                              |
+| `HEAL_ENERGY`           | `0.3`   | Energy restored per tick while standing on a heal tile                                                      |
 
 ### Lifespan / reproduction
 
@@ -311,7 +311,7 @@ modify `core/config.py`.
 | ------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `LIFESPAN_BASE`                 | `6000`  | Baseline lifespan in ticks before the `metabolism` gene's `lifespan_factor` is applied                                                                                                                                                                |
 | `MATURITY_MIN_FRACTION`         | `0.15`  | Organisms younger than this fraction of their own `lifespan` cannot mate; also the age at which visual growth to full size completes                                                                                                                  |
-| `BABY_SIZE_FRACTION`            | `0.25`  | Visual scale of a newborn organism at age 0; grows linearly to `1.0` at `base_lifespan * MATURITY_MIN_FRACTION`                                                                                                                                       |
+| `BABY_SIZE_FRACTION`            | `0.4`   | Visual scale of a newborn organism at age 0; grows linearly to `1.0` at `base_lifespan * MATURITY_MIN_FRACTION`                                                                                                                                       |
 | `ASEXUAL_MATURITY_MIN_FRACTION` | `0.4`   | Asexual organisms must wait longer before they can clone                                                                                                                                                                                              |
 | `MATURITY_MAX_FRACTION`         | `0.8`   | Organisms older than this fraction of their own `lifespan` can no longer mate                                                                                                                                                                         |
 | `MUTATION_RATE`                 | `0.1`   | Per-parameter probability of mutation when a child genome is produced                                                                                                                                                                                 |
@@ -319,11 +319,11 @@ modify `core/config.py`.
 | `MUTATION_INSERTION_RATE`       | `0.05`  | Probability of adding a new gene during structural mutation                                                                                                                                                                                           |
 | `MATING_RATE`                   | `0.3`   | Probability, per tick two eligible organisms are touching, that mating is actually attempted                                                                                                                                                          |
 | `ASEXUAL_COOLDOWN_RATE`         | `2.0`   | Global scale on the `asexual` gene's reproduction cooldown; lower means more frequent solo reproduction                                                                                                                                               |
-| `MATING_DIVERSITY`              | `0.5`   | Maximum `DNA.diversity()` allowed between two parents for mating to be considered (too different = incompatible). Random genomes average ~0.7 diversity against each other, so lower thresholds starve sexual reproduction and let `asexual` dominate |
-| `MATING_DENSITY_RADIUS`         | `60`    | Radius (pixels) used to count nearby organisms before allowing a mating event                                                                                                                                                                         |
-| `MATING_DENSITY_LIMIT`          | `2`     | Mating is blocked if more than this many other organisms are within `MATING_DENSITY_RADIUS` (prevents population explosions in clusters)                                                                                                              |
+| `MATING_DIVERSITY`              | `0.45`  | Maximum `DNA.diversity()` allowed between two parents for mating to be considered (too different = incompatible). Random genomes average ~0.7 diversity against each other, so lower thresholds starve sexual reproduction and let `asexual` dominate |
+| `MATING_DENSITY_RADIUS`         | `80`    | Radius (pixels) used to count nearby organisms before allowing a mating event                                                                                                                                                                         |
+| `MATING_DENSITY_LIMIT`          | `3`     | Mating is blocked if more than this many other organisms are within `MATING_DENSITY_RADIUS` (prevents population explosions in clusters)                                                                                                              |
 | `POPULATION_CAP`                | `0.1`   | Fraction of `cols × rows` tiles that sets `world.max_organisms`                                                                                                                                                                                       |
-| `SPECIES_CAP_FRACTION`          | `0.75`  | No single species can exceed this fraction of `max_organisms`                                                                                                                                                                                         |
+| `SPECIES_CAP_FRACTION`          | `1.0`   | No single species can exceed this fraction of `max_organisms`                                                                                                                                                                                         |
 | `MATING_DEATH_CHANCE`           | `0.05`  | Probability one parent dies instead of reproducing when mating is attempted                                                                                                                                                                           |
 | `MAX_GENES`                     | `16`    | Hard cap on genome length; insertions are ignored once reached                                                                                                                                                                                        |
 
@@ -335,16 +335,16 @@ listed in `GENE_SPAWN_WEIGHTS`; the override map reduces or boosts per-gene
 chances. For example, `asexual` is weighted lower to stop it from dominating the
 map.
 
-| Constant                    | Default                                                                                                                                     | Meaning                                                                                                                                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GENE_DEFAULT_SPAWN_WEIGHT` | `1.0`                                                                                                                                       | Default relative chance for any gene not explicitly overridden                                                                                                                                   |
-| `GENE_SPAWN_WEIGHTS`        | `{'asexual': 0.4, 'spike': 0.7, 'cannibal': 0.4, 'pheromone': 1.5, 'eye': 1.5, 'scent': 1.8, 'leg': 1.3, 'memory': 1.2, 'metabolism': 1.8}` | Per-gene override map; higher = more common; `spike`/`cannibal` are rarer to curb aggression; `pheromone`/`eye`/`scent`/`leg`/`metabolism` are more common; `memory` benefits from paired senses |
+| Constant                    | Default                                                                                                                                                               | Meaning                                                                                                                                                                                                        |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GENE_DEFAULT_SPAWN_WEIGHT` | `1.0`                                                                                                                                                                 | Default relative chance for any gene not explicitly overridden                                                                                                                                                 |
+| `GENE_SPAWN_WEIGHTS`        | `{'asexual': 0.4, 'spike': 0.7, 'cannibal': 0.6, 'pheromone': 1.5, 'eye': 1.5, 'scent': 1.8, 'leg': 1.3, 'memory': 1.2, 'jaw': 1.8, 'touch': 1.7, 'metabolism': 1.8}` | Per-gene override map; higher = more common; `spike`/`cannibal` are rarer to curb aggression; `pheromone`/`eye`/`scent`/`leg`/`jaw`/`touch`/`metabolism` are more common; `memory` benefits from paired senses |
 
 ### Death / remains
 
 | Constant               | Default | Meaning                                                  |
 | ---------------------- | ------- | -------------------------------------------------------- |
-| `FOOD_ON_DEATH_CHANCE` | `0.5`   | Probability a dead organism leaves behind edible remains |
+| `FOOD_ON_DEATH_CHANCE` | `0.75`  | Probability a dead organism leaves behind edible remains |
 
 ### Hazards
 
@@ -358,7 +358,7 @@ map.
 | Constant                | Default | Meaning                                                                                                                                                                                                                 |
 | ----------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `WATER_SPEED_PENALTY`   | `0.25`  | Velocity multiplier applied to organisms without the `amphibious` gene while on a water tile                                                                                                                            |
-| `WATER_DROWN_DAMAGE`    | `0.5`   | Energy drained per tick while a non-`amphibious` organism is on a water tile (not reduced by any resistance)                                                                                                            |
+| `WATER_DROWN_DAMAGE`    | `0.3`   | Energy drained per tick while a non-`amphibious` organism is on a water tile (not reduced by any resistance)                                                                                                            |
 | `AMPHIBIOUS_LAND_DRAIN` | `0.1`   | Energy drained per tick while an `amphibious` organism is on a non-water tile                                                                                                                                           |
 | `WATER_SIGHT_DISCOUNT`  | `0.25`  | Multiplier applied to `eye`/`scent` steering weight when the target is seen/smelled across water (non-`amphibious`) and/or across a radioactive/lava tile (stacks multiplicatively; applies regardless of `amphibious`) |
 
