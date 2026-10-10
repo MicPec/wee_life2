@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from ..core import config
 from .base import BodyPartBlueprint, Gene, hsv_to_rgb
 from .geometry import angle_diff, angle_to
+from .sensing import fan_ray_angles
 
 if TYPE_CHECKING:
     from ..core.organism import Organism
@@ -103,11 +104,8 @@ class MemoryGene(Gene):
         # Scan a forward fan rather than 360° so memory does not keep filling up
         # with walls already behind the organism.
         if ray_count > 0 and not organism.perception_events:
-            base_angle = organism.angle
             fov = math.pi * 0.8  # ~144°
-            for i in range(ray_count):
-                frac = i / max(1, ray_count - 1)
-                angle = base_angle + (frac - 0.5) * fov
+            for angle in fan_ray_angles(organism.angle, fov, ray_count):
                 hit = world.tile_map.first_interesting_tile_along_ray(pos, angle, perception_range)
                 if hit is not None:
                     hit_pos, tile_type = hit

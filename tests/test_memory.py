@@ -18,6 +18,37 @@ class TestMemory(unittest.TestCase):
         self.world = World(200, 150, tile_size=20)
         self.world.clear_map()
 
+    def test_memory_single_ray_scans_straight_ahead(self):
+        """A one-ray self-scan must fire at the fan centre, not its edge.
+
+        The old hand-rolled fan computed frac = i / max(1, ray_count - 1),
+        so ray_count == 1 fired at angle - fov/2 (-72°), never seeing what
+        the organism walks into. This is the same bug sensing.fan_ray_angles
+        already fixed."""
+        world = World(800, 800, tile_size=20)
+        world.clear_map()
+        world.set_tile(23, 20, config.TILE_LAVA)  # centre (470, 410), dead ahead
+        gene = MemoryGene({"ray_count": 1.0})
+        org = Organism(DNA([gene]), position=(400.0, 400.0))
+        org.angle = 0.0  # pinned: Organism.__init__ randomises it
+        gene.apply(org, world, 0.0)
+        self.assertTrue(
+            any(e.position == (470.0, 410.0) and e.tile_type == config.TILE_LAVA for e in org.memory),
+            msg=f"expected the forward lava tile in memory, got {org.memory}",
+        )
+
+    def test_memory_single_ray_ignores_old_fan_edge(self):
+        """Negative control: a tile at the old buggy bearing (-72°) must NOT
+        be remembered when the single ray now fires straight ahead."""
+        world = World(800, 800, tile_size=20)
+        world.clear_map()
+        world.set_tile(21, 16, config.TILE_LAVA)  # centre (430, 330), at -72°
+        gene = MemoryGene({"ray_count": 1.0})
+        org = Organism(DNA([gene]), position=(400.0, 400.0))
+        org.angle = 0.0
+        gene.apply(org, world, 0.0)
+        self.assertEqual(org.memory, [])
+
     def test_memory_remembers_tile_under_feet(self):
         self.world.set_tile(2, 2, config.TILE_WATER)
         dna = DNA([MemoryGene()])
