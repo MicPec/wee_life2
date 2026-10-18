@@ -100,17 +100,19 @@ FOOD_ON_DEATH_CHANCE = 0.75  # probability a dead organism leaves behind edible 
 # Water
 WATER_SPEED_PENALTY = 0.25  # velocity multiplier for non-amphibious organisms in water
 WATER_DROWN_DAMAGE = 0.3  # energy drained per tick while non-amphibious organisms are in water
-AMPHIBIOUS_LAND_DRAIN = 0.1  # energy drained per tick while amphibious organisms are on land
+AMPHIBIOUS_LAND_DRAIN = 0.05  # energy drained per tick while amphibious organisms are on land
 WATER_SIGHT_DISCOUNT = 0.25  # eye/scent score multiplier for targets seen/smelled across water (non-amphibious)
 
 # Map generation
-MAP_WATER_FRACTION_MIN = 0.35  # lowest share of the board's interior flooded into lakes by the map generator (R)
+MAP_WATER_FRACTION_MIN = 0.25  # lowest share of the board's interior flooded into lakes by the map generator (R)
 MAP_WATER_FRACTION_MAX = 0.40  # highest share of the interior flooded; each map draws a value in [MIN, MAX]
-MAP_WALL_FRACTION = 0.05  # share of the interior turned into thin wall lines, mostly following the coast
+MAP_WALL_FRACTION = 0.03  # share of the interior turned into thin wall lines, mostly following the coast
 MAP_HAZARD_FRACTION = 0.02  # share of the interior covered by hazards, split into 2-3 islands (one lava on land, the rest radioactive, one of them out on a lake)
-MAP_HEAL_FRACTION = 0.008  # share of the interior covered by heal tiles, split into 2-3 oases (on land and out on a lake)
-MAP_NOISE_SCALE = 14.0  # terrain feature size in tiles; larger = bigger lakes and islands
-MAP_NOISE_OCTAVES = 4  # fractal noise layers; more = more ragged coastlines
+MAP_HEAL_FRACTION = (
+    0.008  # share of the interior covered by heal tiles, split into 2-3 oases (on land and out on a lake)
+)
+MAP_NOISE_SCALE = 50.0  # terrain feature size in tiles; larger = bigger lakes and islands
+MAP_NOISE_OCTAVES = 2  # fractal noise layers; more = more ragged coastlines
 
 # Tiles
 TILE_EMPTY = 0  # walkable empty tile
