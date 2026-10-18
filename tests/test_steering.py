@@ -15,6 +15,7 @@ from wee_life2.core.food import Food
 from wee_life2.core.geometry import angle_diff
 from wee_life2.core.organism import Organism
 from wee_life2.core.world import World
+from wee_life2.genes.amphibious import AmphibiousGene
 from wee_life2.genes.eye import EyeGene
 from wee_life2.genes.fear import FearGene
 from wee_life2.genes.geometry import steer_away, steer_toward
@@ -223,6 +224,110 @@ class TestSenseThreatSelection(unittest.TestCase):
             0.1,
             msg="a smelt food item must not suppress the danger response",
         )
+
+
+class TestAmphibiousWaterReturn(unittest.TestCase):
+    """A drained amphibious steers back toward water (positive weight =
+    attraction; the angle toward the water is passed un-reversed)."""
+
+    def setUp(self):
+        self.world = World(400, 300, tile_size=20)
+        self.world.clear_map()
+
+    def _organism(self, genes, energy=100.0, position=(200.0, 150.0)):
+        org = Organism(DNA(genes), position=position)
+        org.angle = math.pi / 2.0  # facing "down"; the water sits to its right
+        org.energy = energy
+        self.world.add_organism(org)
+        org.drives.clear()
+        org._nearby_organisms = None
+        return org
+
+    def _water_east(self):
+        # Tile (12, 7) centre is (250, 150): dead right of a south-facing organism.
+        self.world.set_tile(12, 7, config.TILE_WATER)
+
+    def test_drained_amphibious_steers_toward_water(self):
+        gene = AmphibiousGene()
+        org = self._organism([gene, EyeGene()])
+        self._water_east()
+        gene.apply(org, self.world, 0.0)
+        self.assertTrue(org.drives)
+        # Water is on the right; a positive water_weight must turn right (< 0).
+        self.assertLess(org.combined_drive(), -1.0)
+
+    def test_water_drive_also_fires_with_scent(self):
+        """Gate 3 accepts `scent` as well as `eye` -- not eye-only."""
+        gene = AmphibiousGene()
+        org = self._organism([gene, ScentGene()])
+        self._water_east()
+        gene.apply(org, self.world, 0.0)
+        self.assertLess(org.combined_drive(), -1.0)
+
+    def test_well_fed_amphibious_has_no_water_drive(self):
+        gene = AmphibiousGene()
+        org = self._organism([gene, EyeGene()])
+        org.energy = org.max_energy
+        self._water_east()
+        gene.apply(org, self.world, 0.0)
+        self.assertFalse(org.drives)
+
+    def test_blind_amphibious_has_no_water_drive(self):
+        gene = AmphibiousGene()
+        org = self._organism([gene])  # no eye/scent in the genome
+        self._water_east()
+        gene.apply(org, self.world, 0.0)
+        self.assertFalse(org.drives)
+
+    def test_no_drive_while_already_on_water(self):
+        gene = AmphibiousGene()
+        self._water_east()
+        org = self._organism([gene, EyeGene()], position=(250.0, 150.0))
+        gene.apply(org, self.world, 0.0)
+        self.assertFalse(org.drives)
+
+    def test_no_drive_when_no_water_in_range(self):
+        gene = AmphibiousGene()
+        org = self._organism([gene, EyeGene()])
+        gene.apply(org, self.world, 0.0)
+        self.assertFalse(org.drives)
+
+    def test_zero_search_range_disables_without_crash(self):
+        gene = AmphibiousGene({"search_range": 0.0})
+        org = self._organism([gene, EyeGene()])
+        self._water_east()
+        gene.apply(org, self.world, 0.0)
+        self.assertFalse(org.drives)
+
+    def test_urgency_ramps_up_as_energy_falls(self):
+        self._water_east()
+        gene = AmphibiousGene()
+        low = self._organism([gene, EyeGene()])
+        low.energy = 0.15 * low.max_energy
+        high = self._organism([gene, EyeGene()])
+        high.energy = 0.45 * high.max_energy
+        gene.apply(low, self.world, 0.0)
+        gene.apply(high, self.world, 0.0)
+        self.assertTrue(low.drives, "low-energy organism emitted no water drive")
+        self.assertTrue(high.drives, "high-energy organism emitted no water drive")
+        self.assertGreater(low.drives[-1][1], high.drives[-1][1])
+
+    def test_duplicate_amphibious_genes_emit_one_drive(self):
+        g1 = AmphibiousGene()
+        g2 = AmphibiousGene()
+        org = self._organism([g1, g2, EyeGene()])
+        self._water_east()
+        g1.apply(org, self.world, 0.0)
+        g2.apply(org, self.world, 0.0)
+        # Only the amphibious genes are applied here, so any drive present is
+        # the water drive; both genes firing would emit two.
+        self.assertEqual(len(org.drives), 1)
+
+    def test_water_drive_params_are_bounded(self):
+        gene = AmphibiousGene({"urgency_threshold": 5.0, "water_weight": -3.0, "search_range": -10.0})
+        self.assertEqual(gene.params["urgency_threshold"], 1.0)
+        self.assertEqual(gene.params["water_weight"], 0.0)
+        self.assertEqual(gene.params["search_range"], 0.0)
 
 
 class TestHealTile(unittest.TestCase):
