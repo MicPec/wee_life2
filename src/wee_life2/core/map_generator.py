@@ -2,11 +2,10 @@
 
 The board is grown from a fractal Perlin-noise height field instead of
 scattering tiles independently: low ground floods into lakes (and the hills
-left standing inside them become islands), most walls follow the coastline a
-few tiles inland so a corridor runs between them and the water, a smaller
-share are free-standing lines (contours, bent straight lines, corridor
-pairs), and small hazard patches and heal oases are dropped onto the
-remaining land.  Every tile type is placed by
+left standing inside them become islands), most walls run right along the
+coastline, on the last tile of land before the water, a smaller share are
+free-standing lines (contours, bent straight lines, corridor pairs), and a
+few hazard islands and heal oases go on land and out on the lakes.  Every tile type is placed by
 *share of the interior* rather than by per-tile probability, so a randomised
 board always lands inside the configured budget (e.g. 35-40% water) whatever
 the seed.
@@ -41,10 +40,16 @@ MIN_LAKE_TILES = 4
 MIN_ISLAND_TILES = 3
 # The main walls follow the coast: the outline of everything within
 # SHORE_WALL_DISTANCE tiles (octile, i.e. near-Euclidean distance) of the
-# water traces the coastline's shape, and segments of it become walls with
-# a corridor of SHORE_WALL_DISTANCE - 1 open tiles between them and the shore.
+# water traces the coastline's shape, and stretches of it become walls.  At
+# 1 that outline is the last tile of land before the water, so the walls sit
+# right on the shore; a larger distance would leave a corridor of
+# SHORE_WALL_DISTANCE - 1 open tiles between wall and water.
 SHORE_WALL_SHARE = 0.7  # share of the wall budget spent on coast-following walls
-SHORE_WALL_DISTANCE = (3, 4)  # one value drawn per map
+SHORE_WALL_DISTANCE = (1, 1)  # one value drawn per map
+# Land hazards keep this far (chessboard) from the water: a blob on the
+# shore would plug the doorways in the coastal walls and cut the land off
+# from the lakes.
+HAZARD_SHORE_GAP = 3
 SHORE_WALL_LENGTH = (14, 26)  # tiles per coastal wall; a doorway separates consecutive ones
 MIN_SHORE_WALL = 8  # shorter coastal stretches are dropped
 # The rest of the budget goes on free-standing one-tile-thick strokes, like
@@ -191,13 +196,13 @@ def generate_terrain(
     _draw_wall_lines(grid, height, interior, wall_budget - placed, rng)
     _connect_pockets(grid, interior)
 
-    # Islands keep a third of the board apart.  On land, hazards stay out of
-    # the shore corridors (and off the beaches), where a blob would plug the
-    # way; in a lake, islands keep a tile of open water around them so they
-    # read as patches out on the water rather than stains on the shore.
+    # Islands keep a third of the board apart.  On land, hazards stay off the
+    # shore (HAZARD_SHORE_GAP), where a blob would plug the doorways in the
+    # coastal walls; in a lake, islands keep a tile of open water around them
+    # so they read as patches out on the water rather than stains on the shore.
     spread = max(4, max(cols, rows) // 3)
     shore = _distance_field(grid, (WATER,), _NEIGHBOURS_8)
-    inland = [cell for cell in interior if shore[cell[1]][cell[0]] > SHORE_WALL_DISTANCE[1]]
+    inland = [cell for cell in interior if shore[cell[1]][cell[0]] > HAZARD_SHORE_GAP]
     near_wall = [cell for cell in inland if _touches_inner_wall(grid, cell)]
     land_dist = _distance_field(grid, (EMPTY, WALL), _NEIGHBOURS_8)
     open_water = [cell for cell in interior if grid[cell[1]][cell[0]] == WATER and land_dist[cell[1]][cell[0]] >= 2]
@@ -386,15 +391,15 @@ def _distance_field(grid: Grid, tiles: tuple[int, ...], neighbours=_NEIGHBOURS_4
 
 
 def _draw_shore_walls(grid: Grid, interior: list[Cell], budget: int, rng: random.Random) -> int:
-    """Wall off stretches of coast a few tiles inland; return tiles walled.
+    """Wall off stretches of coast; return tiles walled.
 
     The outline of the land within ``SHORE_WALL_DISTANCE`` (octile
     distance) of the water repeats the coastline's shape: it is the land
-    just beyond that distance with a 4-neighbour inside it.  Gaps cut
-    every ``SHORE_WALL_SPACING`` tiles split it into segments, and random
-    segments become walls until ``budget`` is spent, so each lake gets a
-    few walled stretches with a corridor along the shore that opens at
-    both ends.
+    just beyond that distance with a 4-neighbour inside it (at distance 1,
+    every land tile touching the water).  Each stretch of outline is cut
+    into walls of ``SHORE_WALL_LENGTH`` with doorways between them, and the
+    longest go up until ``budget`` is spent, so each lake gets a few walled
+    stretches of shore with ways through to the water.
     """
     if budget <= 0:
         return 0
@@ -415,8 +420,8 @@ def _draw_shore_walls(grid: Grid, interior: list[Cell], budget: int, rng: random
     junctions = [cell for cell in band if _has_lump(band_set, cell)]
     cleared = {(c + dc, r + dr) for c, r in junctions for dc in (-1, 0, 1) for dr in (-1, 0, 1)}
     # Walk each stretch of outline from end to end and cut it into walls of
-    # SHORE_WALL_LENGTH with a doorway between consecutive ones, so the
-    # corridor behind them can be entered along the way.
+    # SHORE_WALL_LENGTH with a doorway between consecutive ones, so the land
+    # behind a walled shore can still reach the water along the way.
     pieces: list[list[Cell]] = []
     for group in _cell_groups(band_set - cleared):
         path = _walk_path(_close_diagonals(group, grid, dist))
@@ -497,7 +502,8 @@ def _close_diagonals(segment: list[Cell], grid: Grid, dist: list[list[float]]) -
     """Fill the corner of every diagonal-only joint so the wall has no slit.
 
     The landward corner (larger distance from the water) is preferred, so
-    the shore corridor keeps its width, unless it would complete a 2x2 lump.
+    the wall never eats into the water side, unless it would complete a
+    2x2 lump.
     """
     cells = set(segment)
     for col, row in segment:

@@ -7,6 +7,7 @@ from itertools import pairwise
 from wee_life2.core import config
 from wee_life2.core.map_generator import (
     HAZARD_ISLANDS,
+    HAZARD_SHORE_GAP,
     HEAL_HAZARD_GAP,
     HEAL_ISLANDS,
     SHORE_WALL_DISTANCE,
@@ -131,7 +132,7 @@ class TestGenerateTerrain(unittest.TestCase):
             self.assertGreaterEqual(sum(sizes) / len(sizes), 8.0, f"seed {seed}: wall pieces {sorted(sizes)}")
 
     def test_main_walls_follow_the_coast(self):
-        """Most wall tiles sit a corridor's width from the water, tracing the shore."""
+        """Most wall tiles sit right on the shore, tracing the coastline."""
         shares = []
         for seed, grid in self._maps():
             dist = _octile_distance(grid, config.TILE_WATER)
@@ -180,14 +181,15 @@ class TestGenerateTerrain(unittest.TestCase):
             lava = self._islands(grid, (config.TILE_LAVA,))
             self.assertFalse(any(in_water for in_water, _ in lava), f"seed {seed}: lava out in a lake")
 
-    def test_land_hazards_keep_out_of_the_shore_corridors(self):
+    def test_land_hazards_keep_off_the_shore(self):
+        """A hazard blob on the shore would plug the doorways in the coastal walls."""
         for seed, grid in self._maps():
             dist = _octile_distance(grid, config.TILE_WATER)
             for in_water, group in self._islands(grid, (config.TILE_LAVA, config.TILE_RADIOACTIVE)):
                 if in_water:
                     continue
                 for c, r in group:
-                    self.assertGreater(dist[r][c], SHORE_WALL_DISTANCE[1] - 0.5, f"seed {seed} at {(c, r)}")
+                    self.assertGreater(dist[r][c], HAZARD_SHORE_GAP, f"seed {seed} at {(c, r)}")
 
     def test_tile_budgets(self):
         cells = interior()
