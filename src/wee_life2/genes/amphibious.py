@@ -20,8 +20,8 @@ class AmphibiousGene(Gene):
     suffer a speed penalty (``config.WATER_SPEED_PENALTY``) and slowly drain
     energy (``config.WATER_DROWN_DAMAGE``), see ``Organism.update``. With this
     gene, water is a safe niche: full speed and no drowning damage. The trade-off
-    is an energy drain on land (``config.AMPHIBIOUS_LAND_DRAIN``), which kills a
-    full-energy amphibian in well under half a minute.
+    is an energy drain on land (``config.AMPHIBIOUS_LAND_DRAIN``), which on its own
+    empties a full-energy amphibian in under a minute at the default 0.05.
 
     The gene therefore also emits a water-return drive whenever the organism
     is on land: it steers toward ``World.nearest_water`` with weight
