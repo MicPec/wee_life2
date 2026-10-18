@@ -49,12 +49,12 @@ Keyboard:
 - `T` — toggle top-5 species panel
 - `SPACE` — pause / resume
 - `P` — save screenshot
-- `R` — spawn a few random organisms
+- `R` — spawn a few random organisms (spread over land and water in proportion to their area; those in water are amphibious, those on land are not)
 - `E` — toggle map edit mode
 
 Mouse:
 
-- `LMB` on empty tile — spawn a random organism
+- `LMB` on empty tile — spawn a random organism (amphibious if you click on water)
 - `RMB` on organism — remove it
 
 While paused, hovering an organism shows its DNA/stats panel, and its `generation` number.

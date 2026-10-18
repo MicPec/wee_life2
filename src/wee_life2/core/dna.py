@@ -60,6 +60,23 @@ class DNA:
         return cls(genes)
 
     @classmethod
+    def random_for(cls, amphibious: bool, tries: int = 50) -> "DNA":
+        """A random genome that does (or does not) carry the ``amphibious`` gene.
+
+        Re-rolls :meth:`random` so the rest of the genome keeps its usual
+        distribution (about 30% of random genomes carry the gene); only after
+        ``tries`` misses is the gene added or stripped by hand.
+        """
+        for _ in range(max(1, tries)):
+            dna = cls.random()
+            if any(g.kind == "amphibious" for g in dna.genes) == amphibious:
+                return dna
+        genes = [g for g in dna.genes if g.kind != "amphibious"]
+        if amphibious:
+            genes = genes[: config.MAX_GENES - 1] + [GENE_REGISTRY["amphibious"]()]
+        return cls(genes)
+
+    @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DNA":
         genes = []
         for g in data.get("genes", []):

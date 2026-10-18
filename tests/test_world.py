@@ -1,5 +1,6 @@
 """Tests for World."""
 
+import random
 import unittest
 
 from wee_life2.core import config
@@ -106,6 +107,52 @@ class TestWorld(unittest.TestCase):
         self.assertIn("tick", stats)
         self.assertIn("max_generation", stats)
         self.assertIn("min_generation", stats)
+
+
+
+class TestSpawnBalance(unittest.TestCase):
+    """Random spawns spread over land and water in proportion to their area.
+
+    The medium used to follow the genome (amphibious -> water), so only the
+    ~30% of random genomes that roll `amphibious` went into the water,
+    however much of the board the lakes covered.
+    """
+
+    def setUp(self):
+        self.world = World(400, 300, tile_size=20)
+        self.world.clear_map()
+        # A lake in the middle, clear of the frame so push_out_of_walls never
+        # nudges a swimmer onto land.
+        for row in range(3, self.world.rows - 3):
+            for col in range(3, self.world.cols // 2 + 2):
+                self.world.set_tile(col, row, config.TILE_WATER)
+        self.world.max_organisms = 10_000
+
+    def test_water_share_counts_only_open_tiles(self):
+        tiles = [t for row in self.world.tiles for t in row]
+        water = tiles.count(config.TILE_WATER)
+        expected = water / (water + tiles.count(config.TILE_EMPTY))
+        self.assertAlmostEqual(self.world.water_share(), expected)
+
+    def test_spawns_follow_the_area_split(self):
+        random.seed(3)
+        self.world.spawn_organisms(600)
+        organisms = self.world.organisms
+        in_water = sum(1 for o in organisms if self.world.is_water(o.position))
+        self.assertAlmostEqual(in_water / len(organisms), self.world.water_share(), delta=0.06)
+
+    def test_genome_matches_the_medium(self):
+        random.seed(4)
+        self.world.spawn_organisms(200)
+        for organism in self.world.organisms:
+            amphibious = any(g.kind == "amphibious" for g in organism.dna.genes)
+            self.assertEqual(amphibious, self.world.is_water(organism.position))
+
+    def test_dry_board_spawns_everything_on_land(self):
+        self.world.clear_map()
+        self.assertEqual(self.world.water_share(), 0.0)
+        self.world.spawn_organisms(30)
+        self.assertFalse(any(self.world.is_water(o.position) for o in self.world.organisms))
 
 
 if __name__ == "__main__":

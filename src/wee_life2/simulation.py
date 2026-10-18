@@ -109,11 +109,16 @@ class Simulation:
         self.stats.step(self.world, dt)
 
     def spawn_at(self, screen_pos: tuple[int, int]) -> None:
-        """Create a random organism at the given screen position if tile is empty."""
+        """Create a random organism at the given screen position if tile is empty.
+
+        The genome matches the clicked medium (amphibious in water, not on
+        land), like :meth:`World.spawn_organisms`, so a click never drops a
+        land creature into a lake to drown or an amphibian onto dry land.
+        """
         if self.world.is_wall(screen_pos):
             return
         pos = (float(screen_pos[0]), float(screen_pos[1]))
-        self.world.spawn_organism(DNA.random(), pos)
+        self.world.spawn_organism(DNA.random_for(amphibious=self.world.is_water(pos)), pos)
 
     def remove_at(self, screen_pos: tuple[int, int]) -> None:
         """Remove an organism under the cursor."""

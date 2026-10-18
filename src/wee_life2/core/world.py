@@ -201,11 +201,31 @@ class World:
         return None
 
     def spawn_organisms(self, count: int) -> None:
+        """Scatter random organisms over land and water in proportion to their area.
+
+        The medium is drawn first, weighted by :meth:`water_share`, and the
+        genome is matched to it: a water spawn always carries ``amphibious``,
+        a land spawn never does.  Letting the genome pick the medium put only
+        the ~30% of random genomes that happen to roll ``amphibious`` in the
+        water, however much of the board the lakes covered.
+        """
+        share = self.water_share()
         for _ in range(count):
-            dna = DNA.random()
-            is_amphibious = any(g.kind == "amphibious" for g in dna.genes)
-            pos = self.random_empty_position(in_water=is_amphibious)
-            self.spawn_organism(dna, pos)
+            in_water = random.random() < share
+            pos = self.random_empty_position(in_water=in_water)
+            self.spawn_organism(DNA.random_for(amphibious=in_water), pos)
+
+    def water_share(self) -> float:
+        """Water's share of the open area organisms can spawn on (water, land, heal)."""
+        water = open_land = 0
+        for row in self.tiles:
+            for tile in row:
+                if tile == self.TILE_WATER:
+                    water += 1
+                elif tile in (self.TILE_EMPTY, self.TILE_HEAL):
+                    open_land += 1
+        total = water + open_land
+        return water / total if total else 0.0
 
     def spawn_child_from_dna(
         self, dna: DNA, position: tuple[float, float], parent: Organism | None = None

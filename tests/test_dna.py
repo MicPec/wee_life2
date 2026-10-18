@@ -139,5 +139,24 @@ class TestDNA(unittest.TestCase):
         self.assertEqual(len(outputs), 1, f"crossover differed across hash seeds: {outputs}")
 
 
+
+class TestRandomForMedium(unittest.TestCase):
+    def _amphibious(self, dna):
+        return any(g.kind == "amphibious" for g in dna.genes)
+
+    def test_matches_the_requested_medium(self):
+        for _ in range(50):
+            self.assertTrue(self._amphibious(DNA.random_for(amphibious=True)))
+            self.assertFalse(self._amphibious(DNA.random_for(amphibious=False)))
+
+    def test_fallback_adds_or_strips_the_gene_within_the_cap(self):
+        for _ in range(30):
+            wet = DNA.random_for(amphibious=True, tries=0)
+            dry = DNA.random_for(amphibious=False, tries=0)
+            self.assertTrue(self._amphibious(wet))
+            self.assertFalse(self._amphibious(dry))
+            self.assertLessEqual(len(wet.genes), config.MAX_GENES)
+
+
 if __name__ == "__main__":
     unittest.main()
