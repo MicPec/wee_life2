@@ -2,14 +2,16 @@
 
 import random
 import unittest
+from itertools import pairwise
 
 from wee_life2.core import config
 from wee_life2.core.map_generator import (
     HEAL_HAZARD_GAP,
-    ROCK_SHORE_GAP,
     PerlinNoise,
     _components,
     _connect_pockets,
+    _line_cells,
+    _trim_self_contact,
     generate_terrain,
 )
 from wee_life2.core.tile_map import TileMap
@@ -23,6 +25,29 @@ def interior(cols=COLS, rows=ROWS):
 
 def share(grid, tile, cells):
     return sum(1 for c, r in cells if grid[r][c] == tile) / len(cells)
+
+
+def wall_lines(grid):
+    """Sizes of the 4-connected wall pieces inside the frame."""
+    rows, cols = len(grid), len(grid[0])
+    seen = set()
+    sizes = []
+    for start in interior(cols, rows):
+        if start in seen or grid[start[1]][start[0]] != config.TILE_WALL:
+            continue
+        seen.add(start)
+        stack = [start]
+        size = 0
+        while stack:
+            c, r = stack.pop()
+            size += 1
+            for nc, nr in ((c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)):
+                inside = 0 < nc < cols - 1 and 0 < nr < rows - 1
+                if inside and (nc, nr) not in seen and grid[nr][nc] == config.TILE_WALL:
+                    seen.add((nc, nr))
+                    stack.append((nc, nr))
+        sizes.append(size)
+    return sizes
 
 
 class TestPerlinNoise(unittest.TestCase):
@@ -83,16 +108,22 @@ class TestGenerateTerrain(unittest.TestCase):
             walkable = _components(grid, cells, lambda t: t != config.TILE_WALL)
             self.assertEqual(len(walkable), 1, f"seed {seed}: walled-in pocket")
 
-    def test_rock_keeps_off_the_shore(self):
-        cells = interior()
+    def test_walls_are_thin_lines_not_blobs(self):
+        """Walls are drawn as one-tile-thick strokes, like the built-in map."""
         for seed, grid in self._maps():
-            for c, r in cells:
-                if grid[r][c] != config.TILE_WALL:
-                    continue
-                for dc in range(-ROCK_SHORE_GAP + 1, ROCK_SHORE_GAP):
-                    for dr in range(-ROCK_SHORE_GAP + 1, ROCK_SHORE_GAP):
-                        if abs(dc) + abs(dr) < ROCK_SHORE_GAP:
-                            self.assertNotEqual(grid[r + dr][c + dc], config.TILE_WATER, f"seed {seed} at {(c, r)}")
+            walls = sum(row[1:-1].count(config.TILE_WALL) for row in grid[1:-1])
+            lumps = sum(
+                1
+                for r in range(1, ROWS - 2)
+                for c in range(1, COLS - 2)
+                if all(grid[r + dr][c + dc] == config.TILE_WALL for dc in (0, 1) for dr in (0, 1))
+            )
+            self.assertLessEqual(lumps, 0.02 * walls, f"seed {seed}: {lumps} 2x2 wall lumps")
+
+    def test_walls_form_long_lines(self):
+        for seed, grid in self._maps():
+            sizes = wall_lines(grid)
+            self.assertGreaterEqual(sum(sizes) / len(sizes), 8.0, f"seed {seed}: wall pieces {sorted(sizes)}")
 
     def test_tile_budgets(self):
         cells = interior()
@@ -100,7 +131,9 @@ class TestGenerateTerrain(unittest.TestCase):
             walls = share(grid, config.TILE_WALL, cells)
             hazards = share(grid, config.TILE_LAVA, cells) + share(grid, config.TILE_RADIOACTIVE, cells)
             heal = share(grid, config.TILE_HEAL, cells)
-            self.assertLessEqual(walls * len(cells), round(config.MAP_WALL_FRACTION * len(cells)), f"seed {seed}")
+            budget = round(config.MAP_WALL_FRACTION * len(cells))
+            self.assertLessEqual(walls * len(cells), budget, f"seed {seed}")
+            self.assertGreaterEqual(walls * len(cells), 0.8 * budget, f"seed {seed}: wall lines did not fit")
             self.assertAlmostEqual(hazards, config.MAP_HAZARD_FRACTION, delta=0.005, msg=f"seed {seed}")
             self.assertGreater(heal, 0.0, f"seed {seed}")
             self.assertLessEqual(heal, 0.015, f"seed {seed}: too many heal tiles")
@@ -149,6 +182,25 @@ class TestGenerateTerrain(unittest.TestCase):
             config.MAP_WATER_FRACTION_MIN, config.MAP_WATER_FRACTION_MAX = old
 
 
+class TestWallStrokes(unittest.TestCase):
+    def test_line_cells_are_a_closed_staircase(self):
+        """No diagonal steps: corner-touching walls would leave a gap to slip through."""
+        for end in ((5, 3), (-4, 7), (6, -6), (0, 5), (-3, 0)):
+            cells = _line_cells((0, 0), end)
+            self.assertEqual(cells[0], (0, 0))
+            self.assertEqual(cells[-1], end)
+            for (c0, r0), (c1, r1) in pairwise(cells):
+                self.assertEqual(abs(c1 - c0) + abs(r1 - r0), 1, f"diagonal step in line to {end}")
+
+    def test_stroke_is_cut_where_it_curls_back(self):
+        hook = [(0, 0), (1, 0), (2, 0), (3, 0), (3, 1), (2, 1), (1, 1)]
+        # (3, 1) is an ordinary staircase corner; (2, 1) is the first cell
+        # that runs alongside the stroke's own earlier cells.
+        self.assertEqual(_trim_self_contact(hook), hook[:5])
+        straight = [(c, 0) for c in range(10)]
+        self.assertEqual(_trim_self_contact(straight), straight)
+
+
 class TestConnectPockets(unittest.TestCase):
     def test_carves_a_ring_of_rock_open(self):
         tile_map = TileMap(200, 200, tile_size=20)
@@ -162,8 +214,9 @@ class TestConnectPockets(unittest.TestCase):
         self.assertEqual(len(_components(grid, cells, lambda t: t != config.TILE_WALL)), 2)
         _connect_pockets(grid, cells)
         self.assertEqual(len(_components(grid, cells, lambda t: t != config.TILE_WALL)), 1)
-        # Only one rock tile is needed to open a one-thick ring.
-        self.assertEqual(sum(row.count(config.TILE_WALL) for row in grid), 36 + 16 - 1)
+        # One wall tile opens a one-thick ring; the exit is widened along the
+        # wall to a three-tile doorway so big organisms fit through.
+        self.assertEqual(sum(row.count(config.TILE_WALL) for row in grid), 36 + 16 - 3)
 
 
 if __name__ == "__main__":

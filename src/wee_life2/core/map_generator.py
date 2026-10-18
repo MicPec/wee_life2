@@ -1,10 +1,11 @@
-"""Procedural terrain: lakes, islands, rock outcrops, hazard patches and heal oases.
+"""Procedural terrain: lakes, islands, wall lines, hazard patches and heal oases.
 
 The board is grown from a fractal Perlin-noise height field instead of
 scattering tiles independently: low ground floods into lakes (and the hills
-left standing inside them become islands), the highest ground away from the
-shore is raised into rock outcrops (walls), and small hazard patches and heal
-oases are dropped onto the remaining land.  Every tile type is placed by
+left standing inside them become islands), long one-tile-thick wall lines are
+drawn across the land -- some tracing the terrain's contours parallel to the
+shore, some straight, some as parallel pairs forming corridors -- and small
+hazard patches and heal oases are dropped onto the remaining land.  Every tile type is placed by
 *share of the interior* rather than by per-tile probability, so a randomised
 board always lands inside the configured budget (e.g. 35-40% water) whatever
 the seed.
@@ -18,6 +19,7 @@ from __future__ import annotations
 import math
 import random
 from collections import deque
+from itertools import pairwise
 
 from . import config
 
@@ -35,11 +37,24 @@ HEAL = config.TILE_HEAL
 # surroundings: single-tile puddles and specks read as noise, not terrain.
 MIN_LAKE_TILES = 4
 MIN_ISLAND_TILES = 3
-# Rock never touches the shore, so coasts stay walkable, and keeps off the
-# frame so outcrops do not just read as a thicker border wall.
-ROCK_SHORE_GAP = 2
-ROCK_FRAME_GAP = 3
-# Share of the hazard budget that becomes lava (seeded against rock, like
+# Walls are long one-tile-thick strokes, like the hand-drawn built-in map,
+# not blobs.  Lengths are tiles of travel per stroke.
+WALL_LINE_LENGTH = (16.0, 34.0)
+MIN_WALL_LINE = 8  # shorter strokes (clipped by the frame or water) are dropped
+# Share of strokes that trace a height contour from near the shore, so the
+# wall runs parallel to the coast and leaves a corridor along it.
+WALL_CONTOUR_SHARE = 0.5
+CONTOUR_VERTEX_STEP = 3  # contour points kept per polyline vertex (smooths the staircase)
+# Share of straight strokes drawn as a parallel pair: an explicit corridor.
+WALL_CORRIDOR_SHARE = 0.35
+WALL_CORRIDOR_WIDTH = (3, 4)  # open tiles between the two walls of a corridor
+WALL_DOOR_CHANCE = 0.5  # chance a long stroke gets a doorway cut into it
+WALL_DOOR_WIDTH = 3  # path cells removed per doorway / widened pocket exit
+WALL_MAX_WATER = 0.4  # strokes running mostly through a lake are rejected
+# A new stroke may touch existing walls at a couple of cells (a T-junction or
+# crossing) but not run alongside one, which would thicken it into a blob.
+WALL_MAX_CONTACT = 2
+# Share of the hazard budget that becomes lava (seeded against walls, like
 # volcanic vents); the rest is radioactive ground.
 LAVA_SHARE = 0.35
 HAZARD_PATCH_SIZE = (3, 7)
@@ -146,13 +161,13 @@ def generate_terrain(
 
     height = _height_field(cols, rows, rng)
     _flood_lowlands(grid, height, interior, _budget(water_fraction, n))
-    _raise_rocks(grid, height, interior, _budget(wall_fraction, n), rng)
+    _draw_wall_lines(grid, height, interior, _budget(wall_fraction, n), rng)
     _connect_pockets(grid, interior)
 
     hazard_total = _budget(hazard_fraction, n)
     lava_total = round(hazard_total * LAVA_SHARE)
-    near_rock = [cell for cell in interior if grid[cell[1]][cell[0]] == EMPTY and _touches_rock(grid, cell)]
-    _scatter_patches(grid, interior, LAVA, lava_total, HAZARD_PATCH_SIZE, rng, preferred=near_rock)
+    near_wall = [cell for cell in interior if grid[cell[1]][cell[0]] == EMPTY and _touches_inner_wall(grid, cell)]
+    _scatter_patches(grid, interior, LAVA, lava_total, HAZARD_PATCH_SIZE, rng, preferred=near_wall)
     _scatter_patches(grid, interior, RADIOACTIVE, hazard_total - lava_total, HAZARD_PATCH_SIZE, rng)
 
     heal_total = _budget(heal_fraction, n)
@@ -285,12 +300,12 @@ def _touches(grid: Grid, cell: Cell, tile: int) -> bool:
     return any(grid[row + dr][col + dc] == tile for dc, dr in _NEIGHBOURS_4)
 
 
-def _touches_rock(grid: Grid, cell: Cell) -> bool:
-    """True if an *interior* wall (an outcrop, not the frame) borders ``cell``."""
+def _touches_inner_wall(grid: Grid, cell: Cell, neighbours=_NEIGHBOURS_4) -> bool:
+    """True if an *interior* wall (a wall line, not the frame) borders ``cell``."""
     col, row = cell
     rows = len(grid)
     cols = len(grid[0])
-    for dc, dr in _NEIGHBOURS_4:
+    for dc, dr in neighbours:
         c, r = col + dc, row + dr
         if 0 < c < cols - 1 and 0 < r < rows - 1 and grid[r][c] == WALL:
             return True
@@ -319,51 +334,211 @@ def _distance_field(grid: Grid, tiles: tuple[int, ...]) -> list[list[float]]:
     return dist
 
 
-def _raise_rocks(grid: Grid, height: list[list[float]], interior: list[Cell], count: int, rng: random.Random) -> None:
-    """Raise rock outcrops on the highest inland ground.
+def _draw_wall_lines(grid: Grid, height: list[list[float]], interior: list[Cell], budget: int, rng: random.Random) -> None:
+    """Draw long, one-tile-thick wall strokes until ``budget`` tiles are walled.
 
-    Height alone would pile every rock onto one or two summits, so it is
-    mixed with a finer ridged-noise layer that breaks the outcrops into
-    ragged ridges and scattered boulder fields.
+    Three kinds of stroke, mirroring the hand-drawn built-in map: contour
+    lines started near the shore that follow the height field's isoline, so
+    they run parallel to the coast and leave a corridor along it; straight
+    lines with a bend or two; and parallel pairs of straight lines that form
+    an explicit corridor.  Lines are 4-connected staircases (no diagonal
+    gaps to slip through) and long ones get a doorway.
     """
-    if count <= 0:
+    if budget <= 0:
         return
-    ridge = PerlinNoise(rng)
-    scale = max(1.0, config.MAP_NOISE_SCALE) / 2.5
-    ox, oy = rng.uniform(0.0, 200.0), rng.uniform(0.0, 200.0)
     shore = _distance_field(grid, (WATER,))
-    rows = len(grid)
-    cols = len(grid[0])
-    land = [
-        (col, row)
-        for col, row in interior
-        if grid[row][col] == EMPTY
-        and shore[row][col] >= ROCK_SHORE_GAP
-        and ROCK_FRAME_GAP <= col < cols - ROCK_FRAME_GAP
-        and ROCK_FRAME_GAP <= row < rows - ROCK_FRAME_GAP
-    ]
+    land = [cell for cell in interior if grid[cell[1]][cell[0]] == EMPTY]
     if not land:
         return
-    lo = min(height[row][col] for col, row in land)
-    span = max(1e-9, max(height[row][col] for col, row in land) - lo)
+    coastal = [cell for cell in land if 2 <= shore[cell[1]][cell[0]] <= 4]
+    placed = 0
+    for _ in range(300):
+        if placed >= budget:
+            return
+        if coastal and rng.random() < WALL_CONTOUR_SHARE:
+            strokes = [_contour_stroke(grid, height, rng.choice(coastal), rng)]
+        else:
+            strokes = _straight_strokes(grid, rng.choice(land), rng)
+        # Check every stroke before drawing any, so the two walls of a
+        # corridor are judged against the same board.
+        strokes = [stroke for stroke in strokes if _stroke_fits(grid, stroke)]
+        for stroke in strokes:
+            stroke = _cut_doorway(stroke[: budget - placed], rng)
+            for col, row in stroke:
+                # Only land is walled: a stroke crossing an inlet breaks off at
+                # the water, so the lake keeps the share it was flooded to.
+                if grid[row][col] == EMPTY:
+                    grid[row][col] = WALL
+                    placed += 1
 
-    def score(cell: Cell) -> float:
-        col, row = cell
-        elevation = (height[row][col] - lo) / span
-        crest = 1.0 - abs(ridge.fbm(col / scale + ox, row / scale + oy, 3))
-        return 0.55 * elevation + 0.45 * crest
 
-    land.sort(key=score, reverse=True)
-    for col, row in land[:count]:
-        grid[row][col] = WALL
+def _line_cells(a: Cell, b: Cell) -> list[Cell]:
+    """4-connected Bresenham line from ``a`` to ``b`` (both ends included).
+
+    A plain Bresenham line steps diagonally, and two wall tiles meeting only
+    at a corner leave a gap organisms can slip through; splitting each
+    diagonal step into two straight ones draws a closed staircase instead.
+    """
+    (c, r), (c1, r1) = a, b
+    cells = [(c, r)]
+    dc = abs(c1 - c)
+    dr = abs(r1 - r)
+    sc = 1 if c1 > c else -1
+    sr = 1 if r1 > r else -1
+    err = dc - dr
+    while (c, r) != (c1, r1):
+        e2 = 2 * err
+        if e2 > -dr:
+            err -= dr
+            c += sc
+            cells.append((c, r))
+        if e2 < dc:
+            err += dc
+            r += sr
+            cells.append((c, r))
+    return cells
+
+
+def _polyline_cells(points: list[tuple[float, float]], grid: Grid) -> list[Cell]:
+    """Rasterise a polyline, keeping its longest run inside the interior."""
+    rows = len(grid)
+    cols = len(grid[0])
+    cells: list[Cell] = []
+    for a, b in pairwise(points):
+        segment = _line_cells((round(a[0]), round(a[1])), (round(b[0]), round(b[1])))
+        cells.extend(segment[1:] if cells else segment)
+    best: list[Cell] = []
+    run: list[Cell] = []
+    for col, row in cells:
+        if 0 < col < cols - 1 and 0 < row < rows - 1:
+            if (col, row) not in run:
+                run.append((col, row))
+            continue
+        if len(run) > len(best):
+            best = run
+        run = []
+    return _trim_self_contact(run if len(run) > len(best) else best)
+
+
+def _trim_self_contact(cells: list[Cell]) -> list[Cell]:
+    """Cut a stroke where it curls back alongside itself.
+
+    A contour squeezed through a narrow neck of land can spiral, and a line
+    running next to its own earlier cells reads as a lump, not a wall.  The
+    two previous cells always touch a staircase cell, so only contact with
+    anything older counts.
+    """
+    seen: set[Cell] = set()
+    for i, (col, row) in enumerate(cells):
+        if any((col + dc, row + dr) in seen for dc, dr in _NEIGHBOURS_8):
+            return cells[:i]
+        if i >= 2:
+            seen.add(cells[i - 2])
+    return cells
+
+
+def _straight_strokes(grid: Grid, start: Cell, rng: random.Random) -> list[list[Cell]]:
+    """A straight wall with up to two bends, sometimes doubled into a corridor."""
+    angle = rng.uniform(0.0, 2.0 * math.pi)
+    length = rng.uniform(*WALL_LINE_LENGTH)
+    corridor = rng.random() < WALL_CORRIDOR_SHARE
+    # Corridors bend at most once and gently, so the pair stays parallel.
+    bends = rng.randint(0, 1) if corridor else rng.randint(0, 2)
+    points = [(float(start[0]), float(start[1]))]
+    heading = angle
+    for _ in range(bends + 1):
+        seg = length / (bends + 1)
+        x, y = points[-1]
+        points.append((x + math.cos(heading) * seg, y + math.sin(heading) * seg))
+        turn = rng.uniform(0.2, 0.45) if corridor else rng.uniform(0.35, 0.9)
+        heading += rng.choice((-1.0, 1.0)) * turn
+    lines = [points]
+    if corridor:
+        offset = rng.randint(*WALL_CORRIDOR_WIDTH) + 1
+        nx, ny = -math.sin(angle) * offset, math.cos(angle) * offset
+        lines.append([(x + nx, y + ny) for x, y in points])
+    return [_polyline_cells(line, grid) for line in lines]
+
+
+def _sample(height: list[list[float]], x: float, y: float) -> float:
+    """Bilinear height at a fractional tile position (clamped to the board)."""
+    rows = len(height)
+    cols = len(height[0])
+    x = min(max(x, 0.0), cols - 1.001)
+    y = min(max(y, 0.0), rows - 1.001)
+    c = int(x)
+    r = int(y)
+    fx = x - c
+    fy = y - r
+    top = _lerp(height[r][c], height[r][c + 1], fx)
+    bottom = _lerp(height[r + 1][c], height[r + 1][c + 1], fx)
+    return _lerp(top, bottom, fy)
+
+
+def _contour_stroke(grid: Grid, height: list[list[float]], start: Cell, rng: random.Random) -> list[Cell]:
+    """Trace the height isoline through ``start`` for one stroke length.
+
+    The coast is itself an isoline of the height field, so a contour started
+    a few tiles inland runs parallel to the shore.  Each step moves one tile
+    along the tangent, plus a small Newton correction back onto the starting
+    level so the line does not drift uphill or into the lake.
+    """
+    x, y = float(start[0]), float(start[1])
+    level = _sample(height, x, y)
+    direction = None
+    points = [(x, y)]
+    for _ in range(int(rng.uniform(*WALL_LINE_LENGTH))):
+        gx = _sample(height, x + 0.5, y) - _sample(height, x - 0.5, y)
+        gy = _sample(height, x, y + 0.5) - _sample(height, x, y - 0.5)
+        g = math.hypot(gx, gy)
+        if g < 1e-9:
+            break
+        tx, ty = -gy / g, gx / g
+        if direction is None:
+            if rng.random() < 0.5:
+                tx, ty = -tx, -ty
+        elif tx * direction[0] + ty * direction[1] < 0.0:
+            tx, ty = -tx, -ty
+        direction = (tx, ty)
+        correction = max(-0.5, min(0.5, (_sample(height, x, y) - level) / g))
+        x += tx - gx / g * correction
+        y += ty - gy / g * correction
+        points.append((x, y))
+    # Rasterising every one-tile step makes the rounding jitter back and
+    # forth into 2x2 lumps; a polyline through every third point keeps the
+    # contour's shape but draws it as a clean staircase.
+    points = points[::CONTOUR_VERTEX_STEP] + ([points[-1]] if (len(points) - 1) % CONTOUR_VERTEX_STEP else [])
+    cells = _polyline_cells(points, grid)
+    # Stop at the first water tile: a contour line belongs on land.
+    for i, (col, row) in enumerate(cells):
+        if grid[row][col] == WATER:
+            return cells[:i]
+    return cells
+
+
+def _stroke_fits(grid: Grid, stroke: list[Cell]) -> bool:
+    if len(stroke) < MIN_WALL_LINE:
+        return False
+    if sum(1 for col, row in stroke if grid[row][col] == WATER) > WALL_MAX_WATER * len(stroke):
+        return False
+    contact = sum(1 for cell in stroke if _touches_inner_wall(grid, cell, _NEIGHBOURS_8))
+    return contact <= WALL_MAX_CONTACT
+
+
+def _cut_doorway(stroke: list[Cell], rng: random.Random) -> list[Cell]:
+    """Leave a gap in the middle of a long stroke, with probability WALL_DOOR_CHANCE."""
+    if len(stroke) < 2 * MIN_WALL_LINE or rng.random() >= WALL_DOOR_CHANCE:
+        return stroke
+    i = rng.randint(len(stroke) // 4, 3 * len(stroke) // 4 - WALL_DOOR_WIDTH)
+    return stroke[:i] + stroke[i + WALL_DOOR_WIDTH :]
 
 
 def _connect_pockets(grid: Grid, interior: list[Cell]) -> None:
-    """Carve the cheapest path through rock from every walled-in pocket to the main area.
+    """Carve the cheapest way out of every walled-in pocket to the main area.
 
-    Rock can close a ring around a patch of land; organisms spawned there
-    could never leave.  A 0-1 BFS (rock costs 1, open ground 0) finds the
-    path that removes the fewest rock tiles.
+    Wall lines (with each other or the frame) can close a ring around a patch
+    of land; organisms spawned there could never leave.  A 0-1 BFS (wall
+    costs 1, open ground 0) finds the path that removes the fewest walls.
     """
     for _ in range(len(interior)):
         comps = _components(grid, interior, lambda t: t != WALL)
@@ -401,11 +576,20 @@ def _connect_pockets(grid: Grid, interior: list[Cell]) -> None:
         if reached is None:
             return
         cell = reached
+        carved = []
         while cell is not None:
             col, row = cell
             if grid[row][col] == WALL:
                 grid[row][col] = EMPTY
+                carved.append(cell)
             cell = parent[cell]
+        # A one-tile slit through a thin wall is narrower than a big
+        # organism, so also open the wall cells along the line on either side.
+        for col, row in carved:
+            for dc, dr in _NEIGHBOURS_4:
+                c, r = col + dc, row + dr
+                if 0 < c < cols - 1 and 0 < r < rows - 1 and grid[r][c] == WALL:
+                    grid[r][c] = EMPTY
 
 
 def _scatter_patches(

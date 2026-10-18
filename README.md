@@ -96,7 +96,7 @@ Editor controls:
 - `3` — lava
 - `4` — water
 - `5` — heal
-- `R` — generate a new map: noise-based lakes and islands (35–40% water), rock outcrops on high ground, small hazard patches and a few heal oases (see [Map generation](#map-generation))
+- `R` — generate a new map: noise-based lakes and islands (35–40% water), long thin wall lines forming corridors, small hazard patches and a few heal oases (see [Map generation](#map-generation))
 - `C` — clear map (keeps border walls)
 - `S` — save
 - `E` — exit editor
@@ -366,14 +366,14 @@ map.
 
 ### Map generation
 
-Pressing `R` in the map editor (or in in-simulation edit mode), or starting without a saved map, grows a board from a domain-warped fractal Perlin-noise height field (`core/map_generator.py`): the lowest ground floods into lakes (hills left standing inside them become islands), the coast is smoothed and specks are dissolved, the water share is then corrected along the shoreline to land exactly on budget, the highest inland ground is raised into rock, any pocket walled in by rock gets the cheapest path carved out, and finally small hazard blobs and heal oases are dropped onto open land. Every tile type is placed by share of the interior, so each map lands inside these budgets whatever the seed.
+Pressing `R` in the map editor (or in in-simulation edit mode), or starting without a saved map, grows a board from a domain-warped fractal Perlin-noise height field (`core/map_generator.py`): the lowest ground floods into lakes (hills left standing inside them become islands), the coast is smoothed and specks are dissolved, the water share is then corrected along the shoreline to land exactly on budget, long one-tile-thick wall lines are drawn across the land (some trace the terrain's contours so they run parallel to the shore and leave a corridor along it, some are straight with a bend or two, some are parallel pairs forming a corridor; long ones get a doorway, and walls never replace water), any pocket the lines close off gets the cheapest way out carved as a three-tile doorway, and finally small hazard blobs and heal oases are dropped onto open land. Every tile type is placed by share of the interior, so each map lands inside these budgets whatever the seed.
 
 | Constant                 | Default | Description                                                                                                     |
 | ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------- |
 | `MAP_WATER_FRACTION_MIN` | `0.35`  | Lowest share of the board's interior flooded into lakes when a map is generated (`R`, or no saved map)          |
 | `MAP_WATER_FRACTION_MAX` | `0.40`  | Highest share of the interior flooded; each generated map draws its water share uniformly from `[MIN, MAX]`     |
-| `MAP_WALL_FRACTION`      | `0.05`  | Share of the interior raised into rock outcrops on high inland ground (never on the shore or against the frame) |
-| `MAP_HAZARD_FRACTION`    | `0.03`  | Share of the interior covered by small radioactive/lava patches (lava seeded against rock)                      |
+| `MAP_WALL_FRACTION`      | `0.05`  | Share of the interior drawn as long one-tile-thick wall lines and corridors (land only)                         |
+| `MAP_HAZARD_FRACTION`    | `0.03`  | Share of the interior covered by small radioactive/lava patches (lava seeded against walls)                     |
 | `MAP_HEAL_FRACTION`      | `0.006` | Share of the interior covered by small heal oases, kept apart and away from hazards                             |
 | `MAP_NOISE_SCALE`        | `14.0`  | Terrain feature size in tiles; larger values give bigger lakes and islands                                      |
 | `MAP_NOISE_OCTAVES`      | `4`     | Fractal noise layers; more layers give more ragged coastlines                                                   |

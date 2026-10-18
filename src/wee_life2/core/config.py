@@ -106,7 +106,7 @@ WATER_SIGHT_DISCOUNT = 0.25  # eye/scent score multiplier for targets seen/smell
 # Map generation
 MAP_WATER_FRACTION_MIN = 0.35  # lowest share of the board's interior flooded into lakes by the map generator (R)
 MAP_WATER_FRACTION_MAX = 0.40  # highest share of the interior flooded; each map draws a value in [MIN, MAX]
-MAP_WALL_FRACTION = 0.05  # share of the interior raised into rock outcrops (walls) on high inland ground
+MAP_WALL_FRACTION = 0.05  # share of the interior drawn as long one-tile-thick wall lines and corridors
 MAP_HAZARD_FRACTION = 0.03  # share of the interior covered by small radioactive/lava patches
 MAP_HEAL_FRACTION = 0.006  # share of the interior covered by small heal oases
 MAP_NOISE_SCALE = 14.0  # terrain feature size in tiles; larger = bigger lakes and islands
