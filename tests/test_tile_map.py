@@ -129,9 +129,15 @@ class TestTileMap(unittest.TestCase):
         self.assertAlmostEqual(result[1], 50.0, places=5)
 
     def test_generate_map_includes_heal(self):
-        self.tile_map.generate_map(heal_rate=0.5)
+        self.tile_map.generate_map(seed=3, heal_fraction=0.2)
         heal_count = sum(row.count(config.TILE_HEAL) for row in self.tile_map.tiles)
         self.assertGreater(heal_count, 0)
+
+    def test_generate_map_rewrites_tiles_in_place(self):
+        """Holders of the old ``tiles`` list must keep seeing the live board."""
+        tiles = self.tile_map.tiles
+        self.tile_map.generate_map(seed=1)
+        self.assertIs(self.tile_map.tiles, tiles)
 
     def test_is_wall_circle_at_world_edges(self):
         """A circle clamped to any world edge must not count as a wall."""

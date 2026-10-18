@@ -110,12 +110,20 @@ class World:
 
     def generate_map(
         self,
-        wall_rate: float = 0.08,
-        hazard_rate: float = 0.03,
-        water_rate: float = 0.05,
-        heal_rate: float = 0.02,
+        seed: int | None = None,
+        *,
+        water_fraction: float | None = None,
+        wall_fraction: float | None = None,
+        hazard_fraction: float | None = None,
+        heal_fraction: float | None = None,
     ) -> None:
-        self.tile_map.generate_map(wall_rate, hazard_rate, water_rate, heal_rate)
+        self.tile_map.generate_map(
+            seed,
+            water_fraction=water_fraction,
+            wall_fraction=wall_fraction,
+            hazard_fraction=hazard_fraction,
+            heal_fraction=heal_fraction,
+        )
 
     def clear_map(self) -> None:
         self.tile_map.clear_map()

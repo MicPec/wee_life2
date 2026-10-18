@@ -7,6 +7,7 @@ import random
 from typing import Iterable
 
 from . import config
+from .map_generator import generate_terrain
 
 
 class TileMap:
@@ -321,29 +322,31 @@ class TileMap:
 
     def generate_map(
         self,
-        wall_rate: float = 0.08,
-        hazard_rate: float = 0.03,
-        water_rate: float = 0.05,
-        heal_rate: float = 0.02,
+        seed: int | None = None,
+        *,
+        water_fraction: float | None = None,
+        wall_fraction: float | None = None,
+        hazard_fraction: float | None = None,
+        heal_fraction: float | None = None,
     ) -> None:
-        """Create a random board with walls, hazard zones, water and heal tiles."""
-        for row in range(self.rows):
-            for col in range(self.cols):
-                if row == 0 or row == self.rows - 1 or col == 0 or col == self.cols - 1:
-                    self.tiles[row][col] = self.TILE_WALL
-                else:
-                    r = random.random()
-                    if r < wall_rate:
-                        self.tiles[row][col] = self.TILE_WALL
-                    elif r < wall_rate + hazard_rate:
-                        if random.random() < 0.7:
-                            self.tiles[row][col] = self.TILE_RADIOACTIVE
-                        else:
-                            self.tiles[row][col] = self.TILE_LAVA
-                    elif r < wall_rate + hazard_rate + water_rate:
-                        self.tiles[row][col] = self.TILE_WATER
-                    elif r < wall_rate + hazard_rate + water_rate + heal_rate:
-                        self.tiles[row][col] = self.TILE_HEAL
+        """Grow a fresh board of lakes, islands, rock, hazards and heal oases.
+
+        See ``map_generator.generate_terrain``; ``None`` fractions fall back to
+        the ``MAP_*`` config constants.  The grid is rewritten in place so
+        anything holding ``self.tiles`` keeps seeing the live board.
+        """
+        rng = random.Random(seed) if seed is not None else None
+        terrain = generate_terrain(
+            self.cols,
+            self.rows,
+            rng,
+            water_fraction=water_fraction,
+            wall_fraction=wall_fraction,
+            hazard_fraction=hazard_fraction,
+            heal_fraction=heal_fraction,
+        )
+        for row, line in zip(self.tiles, terrain):
+            row[:] = line
         self._obstacles_generated = True
 
     def clear_map(self) -> None:
