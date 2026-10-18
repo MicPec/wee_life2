@@ -17,12 +17,14 @@ from __future__ import annotations
 import csv
 import json
 import math
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .core import config
 from .core.config_json import config_to_dict
+from .core.snapshot import world_to_dict
 
 if TYPE_CHECKING:
     from .core.organism import Organism
@@ -41,10 +43,12 @@ class RunLogger:
         self.enabled = config.STATS_ENABLED if enabled is None else enabled
         self.sample_interval = config.STATS_SAMPLE_INTERVAL
         self.census_interval = config.STATS_CENSUS_INTERVAL
+        self.snapshot_interval = config.STATS_SNAPSHOT_INTERVAL
 
         self._tick = 0.0
         self._last_sample_tick = 0.0
         self._last_census_tick = 0.0
+        self._last_snapshot_tick = 0.0
 
         self._prev_births = 0
         self._prev_total_deaths = 0
@@ -59,6 +63,7 @@ class RunLogger:
         self._census_file = None
         self._organisms_file = None
         self._run_dir: Path | None = None
+        self._snapshots_dir: Path | None = None
 
         if not self.enabled:
             return
@@ -109,8 +114,17 @@ class RunLogger:
             json.dump(meta, f, indent=2)
             f.write("\n")
 
+        self._snapshots_dir = self._run_dir / "snapshots"
+        self._snapshots_dir.mkdir(exist_ok=True)
+
         # Save a snapshot of the map so the analysis tool can correlate
         # population dynamics with the tile layout.
+        self.save_map(world)
+
+    def save_map(self, world: World) -> None:
+        """(Re)write ``map.json`` so it matches the world's current tile layout."""
+        if not self.enabled or self._run_dir is None:
+            return
         with open(self._run_dir / "map.json", "w", encoding="utf-8") as f:
             json.dump(world.save_tiles(), f)
             f.write("\n")
@@ -131,12 +145,13 @@ class RunLogger:
         suffix = f"{datetime.now().microsecond:04x}"
         return base / f"{timestamp}_{suffix}"
 
-    def step(self, world: World, dt: float) -> None:
+    def step(self, world: World, dt: float, screenshot: Callable[[Path], None] | None = None) -> None:
         """Advance the internal tick counter from the world and sample when a boundary is crossed.
 
         ``world.tick`` is the canonical generation counter; it is converted from
         wall-clock dt using ``config.FPS`` so one rendered frame at 60 FPS
-        increments the counter by one tick.
+        increments the counter by one tick. ``screenshot`` is called with the
+        PNG path when a restorable snapshot is written (``None`` skips it).
         """
         if not self.enabled:
             return
@@ -150,6 +165,19 @@ class RunLogger:
         if self._tick - self._last_census_tick >= self.census_interval:
             self._census(world)
             self._last_census_tick = self._tick
+
+        if self.snapshot_interval > 0 and self._tick - self._last_snapshot_tick >= self.snapshot_interval:
+            self._snapshot(world, screenshot)
+            self._last_snapshot_tick = self._tick
+
+    def _snapshot(self, world: World, screenshot: Callable[[Path], None] | None) -> None:
+        """Write a full restorable snapshot: state JSON plus a board PNG."""
+        base = self._snapshots_dir / f"snapshot_{round(self._tick):08d}"
+        with open(base.with_suffix(".json"), "w", encoding="utf-8") as f:
+            json.dump(world_to_dict(world), f, ensure_ascii=False)
+            f.write("\n")
+        if screenshot is not None:
+            screenshot(base.with_suffix(".png"))
 
     def _sample(self, world: World) -> None:
         """Write one population-level row and any per-species events."""
@@ -341,6 +369,7 @@ class RunLogger:
         self._tick = world.tick
         self._last_sample_tick = self._tick
         self._last_census_tick = self._tick
+        self._last_snapshot_tick = self._tick
 
         self._events_file.write(
             json.dumps(

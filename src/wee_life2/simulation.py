@@ -5,10 +5,13 @@ from __future__ import annotations
 import math
 import random
 from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 from .core import config
 from .core.dna import DNA
 from .core.map_storage import MapStorage
+from .core.snapshot import world_from_dict
 from .core.world import World
 from .render.actions import (
     Action,
@@ -37,14 +40,16 @@ class Simulation:
         width: float = config.WORLD_WIDTH,
         height: float = config.WORLD_HEIGHT,
         storage: MapStorage | None = None,
+        snapshot: dict[str, Any] | None = None,
     ) -> None:
         self.world = World(width, height)
         self.storage = storage or MapStorage()
-        saved = self.storage.load()
-        if saved:
-            self.world.load_tiles(saved)
-        else:
-            self.world.generate_map()
+        if snapshot is None:
+            saved = self.storage.load()
+            if saved:
+                self.world.load_tiles(saved)
+            else:
+                self.world.generate_map()
         self.stats = RunLogger(self.world)
         self.world.run_logger = self.stats
         self.renderer = Renderer(
@@ -52,7 +57,13 @@ class Simulation:
             height=int(height),
             fps=config.FPS,
         )
-        self._seed_population()
+        if snapshot is not None:
+            # The snapshot carries its own tiles and population; seeding here
+            # would waste generate_map and pollute organisms.jsonl with
+            # creatures that are discarded a moment later.
+            self.load_snapshot(snapshot)
+        else:
+            self._seed_population()
 
     def _seed_population(self) -> None:
         """Scatter the starting organisms and food onto the current map."""
@@ -95,7 +106,7 @@ class Simulation:
                 self.world.update(dt)
 
             if not self.renderer.paused:
-                self.stats.step(self.world, dt)
+                self.stats.step(self.world, dt, screenshot=self._save_board_png)
 
             self.renderer.render(self.world)
         self.stats.close()
@@ -106,7 +117,27 @@ class Simulation:
         if dt is None:
             dt = 1.0 / config.FPS if config.FPS > 0 else 1.0 / 60.0
         self.world.update(dt)
-        self.stats.step(self.world, dt)
+        self.stats.step(self.world, dt, screenshot=self._save_board_png)
+
+    def _save_board_png(self, path: Path) -> None:
+        """Render the current frame, then save exactly what is on screen.
+
+        Headless stepping never draws a frame, so render first; in `run()` this
+        just redraws the frame about to be shown anyway.
+        """
+        self.renderer.render(self.world)
+        self.renderer.save_screenshot(path)
+
+    def load_snapshot(self, data: dict[str, Any]) -> None:
+        """Restore world state from a parsed snapshot dict written by ``RunLogger``."""
+        world_from_dict(self.world, data)
+        self.renderer.clear_selections()
+        # Record the restored population so organisms.jsonl describes what
+        # this run actually started with.
+        for organism in self.world.organisms:
+            self.stats.log_organism(organism)
+        self.stats.save_map(self.world)
+        self.stats.log_reset(self.world)
 
     def spawn_at(self, screen_pos: tuple[int, int]) -> None:
         """Create a random organism at the given screen position if tile is empty.

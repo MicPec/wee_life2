@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import sys
 
 
 def _prefer_native_wayland() -> None:
@@ -112,6 +114,13 @@ def main() -> None:
         help="Open the JSON config editor instead of running the simulation",
     )
     parser.add_argument(
+        "--load-snapshot",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Load a stats snapshot JSON and continue the simulation from it",
+    )
+    parser.add_argument(
         "--no-stats",
         action="store_true",
         help="Disable writing per-run statistics to disk",
@@ -155,6 +164,8 @@ def main() -> None:
     storage = MapStorage(args.map_file)
 
     if args.edit_map:
+        if args.load_snapshot:
+            raise SystemExit("Cannot combine --load-snapshot with --edit-map")
         editor = MapEditor(
             width=args.width,
             height=args.height,
@@ -162,9 +173,29 @@ def main() -> None:
         )
         editor.run()
     else:
-        sim = Simulation(
-            width=float(args.width),
-            height=float(args.height),
-            storage=storage,
-        )
+        if args.load_snapshot:
+            try:
+                # The snapshot's geometry wins over --width/--height: a
+                # mismatch is a hard error in world_from_dict, so build the
+                # world to fit.
+                with open(args.load_snapshot, encoding="utf-8") as f:
+                    snapshot = json.load(f)
+                snap_world = snapshot["world"]
+                width = float(snap_world["width"])
+                height = float(snap_world["height"])
+                if (width, height) != (float(args.width), float(args.height)):
+                    print(
+                        f"note: using snapshot world size {width:.0f}x{height:.0f} "
+                        f"(ignoring --width/--height {args.width}x{args.height})",
+                        file=sys.stderr,
+                    )
+                sim = Simulation(width=width, height=height, storage=storage, snapshot=snapshot)
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                raise SystemExit(f"Snapshot error in {args.load_snapshot}: {exc}") from exc
+        else:
+            sim = Simulation(
+                width=float(args.width),
+                height=float(args.height),
+                storage=storage,
+            )
         sim.run()

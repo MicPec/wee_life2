@@ -164,8 +164,12 @@ class Renderer:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         suffix = f"{datetime.now().microsecond:04x}"
         path = base / f"screenshot_{timestamp}_{suffix}.png"
-        pygame.image.save(self.screen, str(path))
+        self.save_screenshot(path)
         print(f"Saved screenshot to {path}")
+
+    def save_screenshot(self, path: Path) -> None:
+        """Save the current screen contents to ``path``."""
+        pygame.image.save(self.screen, str(path))
 
     def _handle_mouse_event(self, event: pygame.event.Event, world: World, actions: list[Action]) -> None:
         """Handle mouse button events for both edit and simulation modes."""

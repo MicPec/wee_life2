@@ -25,6 +25,7 @@ STATS_ENABLED = True  # write per-run statistics to disk
 STATS_BASE_DIR = "data/runs"  # run output directories are created under this path
 STATS_SAMPLE_INTERVAL = 60  # ticks between time-series samples
 STATS_CENSUS_INTERVAL = 300  # ticks between per-species census snapshots
+STATS_SNAPSHOT_INTERVAL = 10000  # ticks between full restorable snapshots (board PNG + state JSON); 0 disables
 
 # Physics / organism
 MAX_SPEED = 2.0  # maximum base movement speed

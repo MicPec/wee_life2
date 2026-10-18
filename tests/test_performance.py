@@ -12,10 +12,18 @@ from wee_life2.render.renderer import Renderer
 
 
 class TestPerformanceSmoke(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._stats_enabled = config.STATS_ENABLED
+        config.STATS_ENABLED = False
+
+    @classmethod
+    def tearDownClass(cls):
+        config.STATS_ENABLED = cls._stats_enabled
+
     def test_simulation_and_render_runs_at_interactive_speed(self):
         """A small world with ~100 organisms should run without timeouts."""
         pygame.init()
-        config.STATS_ENABLED = False
         world = World(400, 300, tile_size=20)
         world.generate_map()
         for _ in range(100):
