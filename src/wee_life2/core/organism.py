@@ -261,6 +261,10 @@ class Organism:
     def steer(self, delta: float) -> None:
         self.angle += delta * config.TURN_RATE
 
+    def _path_clear(self, world: World, target: tuple[float, float]) -> bool:
+        """True if the organism can occupy `target` and reach it from its current position."""
+        return not world.is_wall_circle(target, self.radius) and not world.line_crosses_wall(self.position, target)
+
     # ------------------------------------------------------------------
     # Main update pipeline
     # ------------------------------------------------------------------
@@ -424,14 +428,52 @@ class Organism:
             self.angle = math.atan2(ny, nx)
             self.wander_angle = self.angle
 
-        # Wall collision: simple bounce with a random turn
-        if world.is_wall_circle((x, y), self.radius) or world.line_crosses_wall(self.position, (x, y)):
-            x, y = self.position
-            vx = -vx * 0.4
-            vy = -vy * 0.4
-            # Turn away from the wall
-            self.angle += random.choice([-1, 1]) * random.uniform(0.4, 1.2)
-            self.wander_angle = self.angle
+        # Wall collision: try to bounce off; slide along it only when the
+        # reflected step is blocked too (a dead end / pocket).
+        if not self._path_clear(world, (x, y)):
+            px, py = self.position
+            x_free = self._path_clear(world, (x, py))
+            y_free = self._path_clear(world, (px, y))
+            hit_x = not x_free
+            hit_y = not y_free
+            if x_free and y_free:
+                # Diagonal corner nick: treat as blocked on both axes.
+                hit_x = hit_y = True
+
+            rvx = -vx * config.WALL_RESTITUTION if hit_x else vx
+            rvy = -vy * config.WALL_RESTITUTION if hit_y else vy
+            bx = px + rvx * ticks
+            by = py + rvy * ticks
+            if self._path_clear(world, (bx, by)):
+                # Bounce: take the (already validated) reflected step and
+                # reflect velocity and heading.
+                x, y = bx, by
+                vx, vy = rvx, rvy
+                hnx = math.cos(self.angle)
+                hny = math.sin(self.angle)
+                if hit_x:
+                    hnx = -hnx
+                if hit_y:
+                    hny = -hny
+                self.angle = math.atan2(hny, hnx)
+                self.wander_angle = self.angle
+            elif x_free:
+                y = py
+                vy = 0.0
+                # Aim along the slide so `leg` stops thrusting into the wall.
+                if math.hypot(vx, vy) > 1e-6:
+                    self.angle = math.atan2(vy, vx)
+                    self.wander_angle = self.angle
+            elif y_free:
+                x = px
+                vx = 0.0
+                if math.hypot(vx, vy) > 1e-6:
+                    self.angle = math.atan2(vy, vx)
+                    self.wander_angle = self.angle
+            else:
+                # Fully wedged; the stuck timer below handles the escape.
+                x, y = px, py
+                vx = vy = 0.0
 
         self.position = (x, y)
         self.velocity = (vx, vy)

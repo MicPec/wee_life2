@@ -1,5 +1,6 @@
 """Tests for World."""
 
+import math
 import random
 import unittest
 
@@ -100,6 +101,39 @@ class TestWorld(unittest.TestCase):
         dist = ((a.position[0] - b.position[0]) ** 2 + (a.position[1] - b.position[1]) ** 2) ** 0.5
         self.assertGreaterEqual(dist, a.radius + b.radius - 0.1)
 
+    def test_resolve_collision_mass_weighted(self):
+        """The lighter organism absorbs most of the separation."""
+        dna = DNA.random()
+        heavy = Organism(dna, (100.0, 100.0))
+        light = Organism(dna, (100.0 + heavy.radius * 0.5, 100.0))
+        heavy.mass_ratio = 4.0
+        light.mass_ratio = 0.5
+        self.world.add_organism(heavy)
+        self.world.add_organism(light)
+        heavy_start, light_start = heavy.position, light.position
+        self.world._resolve_collision(heavy, light)
+        heavy_disp = math.hypot(heavy.position[0] - heavy_start[0], heavy.position[1] - heavy_start[1])
+        light_disp = math.hypot(light.position[0] - light_start[0], light.position[1] - light_start[1])
+        self.assertGreater(light_disp, heavy_disp)
+        dist = math.hypot(heavy.position[0] - light.position[0], heavy.position[1] - light.position[1])
+        self.assertGreaterEqual(dist, heavy.radius + light.radius - 0.1)
+
+    def test_resolve_collision_equal_mass_splits_evenly(self):
+        """Equal masses split the same total overlap 50/50."""
+        dna = DNA.random()
+        a = Organism(dna, (100.0, 100.0))
+        b = Organism(dna, (100.0 + a.radius * 0.5, 100.0))
+        a.mass_ratio = b.mass_ratio = 1.0
+        self.world.add_organism(a)
+        self.world.add_organism(b)
+        overlap = a.radius + b.radius - 0.5 * a.radius
+        a_start, b_start = a.position, b.position
+        self.world._resolve_collision(a, b)
+        a_disp = math.hypot(a.position[0] - a_start[0], a.position[1] - a_start[1])
+        b_disp = math.hypot(b.position[0] - b_start[0], b.position[1] - b_start[1])
+        self.assertAlmostEqual(a_disp, overlap / 2, places=6)
+        self.assertAlmostEqual(b_disp, overlap / 2, places=6)
+
     def test_stats(self):
         stats = self.world.stats()
         self.assertIn("organisms", stats)
@@ -107,7 +141,6 @@ class TestWorld(unittest.TestCase):
         self.assertIn("tick", stats)
         self.assertIn("max_generation", stats)
         self.assertIn("min_generation", stats)
-
 
 
 class TestSpawnBalance(unittest.TestCase):

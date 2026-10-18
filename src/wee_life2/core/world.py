@@ -292,13 +292,20 @@ class World:
             dx, dy = random.uniform(-1, 1), random.uniform(-1, 1)
             dist = math.hypot(dx, dy)
         if dist < min_dist:
-            overlap = (a.radius + b.radius - dist) / 2
+            overlap = min_dist - dist
             nx = dx / dist
             ny = dy / dist
             ax, ay = a.position
             bx, by = b.position
-            new_a = (ax - nx * overlap, ay - ny * overlap)
-            new_b = (bx + nx * overlap, by + ny * overlap)
+
+            # Mass-weighted push: the heavier the other body, the larger your
+            # share of the separation (cross assignment; shares sum to 1).
+            ma = max(a.mass_ratio, config.COLLISION_MIN_MASS)
+            mb = max(b.mass_ratio, config.COLLISION_MIN_MASS)
+            a_share = mb / (ma + mb)
+            b_share = ma / (ma + mb)
+            new_a = (ax - nx * overlap * a_share, ay - ny * overlap * a_share)
+            new_b = (bx + nx * overlap * b_share, by + ny * overlap * b_share)
 
             a_safe = not self.tile_map.is_wall_circle(new_a, a.radius) and not self.tile_map.line_crosses_wall(
                 a.position, new_a
@@ -311,15 +318,31 @@ class World:
                 a.position = new_a
                 b.position = new_b
 
-                # Exchange some momentum
+                # Exchange some momentum, weighted by mass.
+                t_a = config.COLLISION_MOMENTUM_EXCHANGE * mb / (ma + mb)
+                t_b = config.COLLISION_MOMENTUM_EXCHANGE * ma / (ma + mb)
                 avx, avy = a.velocity
                 bvx, bvy = b.velocity
-                a.velocity = (avx * 0.7 + bvx * 0.3, avy * 0.7 + bvy * 0.3)
-                b.velocity = (bvx * 0.7 + avx * 0.3, bvy * 0.7 + avy * 0.3)
-            elif a_safe:
-                a.position = new_a
+                a.velocity = (avx * (1 - t_a) + bvx * t_a, avy * (1 - t_a) + bvy * t_a)
+                b.velocity = (bvx * (1 - t_b) + avx * t_b, bvy * (1 - t_b) + avy * t_b)
             elif b_safe:
-                b.position = new_b
+                # a is wall-blocked: the wall is infinitely heavy, so b yields
+                # the whole overlap if it can, else just its own share.
+                full_b = (bx + nx * overlap, by + ny * overlap)
+                if not self.tile_map.is_wall_circle(full_b, b.radius) and not self.tile_map.line_crosses_wall(
+                    b.position, full_b
+                ):
+                    b.position = full_b
+                else:
+                    b.position = new_b
+            elif a_safe:
+                full_a = (ax - nx * overlap, ay - ny * overlap)
+                if not self.tile_map.is_wall_circle(full_a, a.radius) and not self.tile_map.line_crosses_wall(
+                    a.position, full_a
+                ):
+                    a.position = full_a
+                else:
+                    a.position = new_a
 
     def _try_mating(self, a: Organism, b: Organism) -> Organism | None:
         if a is b or a.is_dead or b.is_dead:

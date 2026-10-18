@@ -31,6 +31,9 @@ MAX_SPEED = 2.0  # maximum base movement speed
 FRICTION = 0.92  # velocity decay applied each tick
 TURN_RATE = 0.30  # how fast an organism can change its heading
 MAX_ORGANISM_RADIUS = 20.0  # hard cap on body radius; oversized genomes are scaled down to fit
+WALL_RESTITUTION = 0.4  # fraction of speed kept when bouncing off a wall
+COLLISION_MOMENTUM_EXCHANGE = 0.6  # fraction of velocity swapped per collision, split by mass
+COLLISION_MIN_MASS = 0.05  # floor on effective collision mass so a degenerate genome stays pushable
 
 # Age-based movement slowdown
 AGE_SLOWDOWN_START = 0.80  # fraction of lifespan at which movement begins to slow

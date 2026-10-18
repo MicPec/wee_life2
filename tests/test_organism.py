@@ -273,6 +273,69 @@ class TestOrganism(unittest.TestCase):
         self.assertGreater(organism.position[1], organism.radius + 2.0)
 
 
+class TestWallCollision(unittest.TestCase):
+    """Bounce-first wall collision in `_apply_physics_and_movement`."""
+
+    def setUp(self):
+        self.world = World(240, 180, tile_size=20)
+        self.world.clear_map()
+
+    def _wall_column(self, col):
+        for row in range(self.world.rows):
+            self.world.set_tile(col, row, config.TILE_WALL)
+
+    def _organism(self, position, angle, velocity):
+        organism = Organism(DNA([]), position)
+        organism.angle = angle  # Organism.__init__ randomises angle; pin it.
+        organism.wander_angle = angle
+        organism.velocity = velocity
+        self.world.add_organism(organism)
+        return organism
+
+    def test_wall_bounce_reflects_heading(self):
+        """Heading into a wall with open space behind must reflect both the
+        blocked velocity component and the heading away from the wall."""
+        self._wall_column(6)  # x in [120, 140)
+        organism = self._organism((114.0, 90.0), angle=0.0, velocity=(1.5, 0.0))
+        organism.update(self.world, 1.0 / config.FPS)
+        # The bounce moves the organism to the reflected position, away from
+        # the wall column at x in [120, 140).
+        self.assertLess(organism.position[0], 114.0)
+        self.assertLess(organism.velocity[0], 0.0)
+        self.assertLess(math.cos(organism.angle), 0.0)
+        self.assertEqual(organism.wander_angle, organism.angle)
+
+    def test_wall_bounce_is_deterministic(self):
+        """The wall branch consumes no randomness: identical state must give
+        an identical resulting angle (the old random kick would differ)."""
+        self._wall_column(6)
+        organism = self._organism((114.0, 90.0), angle=0.0, velocity=(1.5, 0.0))
+        organism.update(self.world, 1.0 / config.FPS)
+        angle_first = organism.angle
+        organism.position = (114.0, 90.0)
+        organism.velocity = (1.5, 0.0)
+        organism.angle = 0.0
+        organism.wander_angle = 0.0
+        organism.update(self.world, 1.0 / config.FPS)
+        self.assertEqual(organism.angle, angle_first)
+
+    def test_wall_slide_when_bounce_blocked(self):
+        """In a dead end where the reflected step is also blocked, the
+        organism slides along the open axis with the blocked component
+        zeroed and its heading aligned to the slide direction."""
+        self._wall_column(4)  # x in [80, 100): wall behind on -x
+        self._wall_column(6)  # x in [120, 140): wall ahead on +x
+        organism = self._organism((110.0, 90.0), angle=math.pi / 4, velocity=(1.0, 1.0))
+        # dt=1.0 (60 ticks) makes both the forward and the reflected step
+        # overshoot the corridor, so the bounce fails and the slide wins.
+        organism.update(self.world, 1.0)
+        self.assertEqual(organism.position[0], 110.0)
+        self.assertGreater(organism.position[1], 90.0)
+        self.assertEqual(organism.velocity[0], 0.0)
+        self.assertGreater(organism.velocity[1], 0.0)
+        self.assertAlmostEqual(organism.angle, math.pi / 2)
+
+
 class TestJawGene(unittest.TestCase):
     """Jaw reach: the mouth is a point `reach` ahead whose grab radius is
     the jaw's own aperture (its `size`), not `reach` a second time."""
