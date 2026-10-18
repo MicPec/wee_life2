@@ -6,11 +6,16 @@ from itertools import pairwise
 
 from wee_life2.core import config
 from wee_life2.core.map_generator import (
+    HAZARD_ISLANDS,
     HEAL_HAZARD_GAP,
+    HEAL_ISLANDS,
+    SHORE_WALL_DISTANCE,
     PerlinNoise,
+    _cell_groups,
     _components,
     _connect_pockets,
     _line_cells,
+    _octile_distance,
     _trim_self_contact,
     generate_terrain,
 )
@@ -124,6 +129,65 @@ class TestGenerateTerrain(unittest.TestCase):
         for seed, grid in self._maps():
             sizes = wall_lines(grid)
             self.assertGreaterEqual(sum(sizes) / len(sizes), 8.0, f"seed {seed}: wall pieces {sorted(sizes)}")
+
+    def test_main_walls_follow_the_coast(self):
+        """Most wall tiles sit a corridor's width from the water, tracing the shore."""
+        shares = []
+        for seed, grid in self._maps():
+            dist = _octile_distance(grid, config.TILE_WATER)
+            walls = [(c, r) for c, r in interior() if grid[r][c] == config.TILE_WALL]
+            low, high = SHORE_WALL_DISTANCE
+            coastal = sum(1 for c, r in walls if low <= dist[r][c] < high + 1.5)
+            shares.append(coastal / len(walls))
+            self.assertGreater(coastal / len(walls), 0.3, f"seed {seed}")
+        self.assertGreater(sum(shares) / len(shares), 0.6)
+
+    def test_hazards_and_heal_come_as_a_few_compact_islands(self):
+        for seed, grid in self._maps():
+            for tiles, (low, high) in (((config.TILE_LAVA, config.TILE_RADIOACTIVE), HAZARD_ISLANDS), ((config.TILE_HEAL,), HEAL_ISLANDS)):
+                groups = _cell_groups({(c, r) for c, r in interior() if grid[r][c] in tiles})
+                self.assertGreaterEqual(len(groups), low, f"seed {seed}: {tiles}")
+                self.assertLessEqual(len(groups), high, f"seed {seed}: {tiles}")
+                for group in groups:
+                    width = max(c for c, _ in group) - min(c for c, _ in group) + 1
+                    height = max(r for _, r in group) - min(r for _, r in group) + 1
+                    self.assertLessEqual(max(width, height) / min(width, height), 4.0, f"seed {seed}: strip-like island")
+            lava = _cell_groups({(c, r) for c, r in interior() if grid[r][c] == config.TILE_LAVA})
+            self.assertEqual(len(lava), 1, f"seed {seed}: one lava island")
+
+    def _islands(self, grid, tiles):
+        """(sits_in_water, cells) per 8-connected island of ``tiles``."""
+        out = []
+        for group in _cell_groups({(c, r) for c, r in interior() if grid[r][c] in tiles}):
+            cells = set(group)
+            around = {
+                grid[r + dr][c + dc]
+                for c, r in group
+                for dc, dr in ((1, 0), (-1, 0), (0, 1), (0, -1))
+                if (c + dc, r + dr) not in cells
+            }
+            out.append((around <= {config.TILE_WATER}, group))
+        return out
+
+    def test_lakes_get_hazards_and_heal_too(self):
+        """At least one radioactive island and one heal oasis sit out in a lake."""
+        for seed, grid in self._maps():
+            hazards = self._islands(grid, (config.TILE_RADIOACTIVE,))
+            heal = self._islands(grid, (config.TILE_HEAL,))
+            self.assertTrue(any(in_water for in_water, _ in hazards), f"seed {seed}: no hazard on the water")
+            self.assertTrue(any(in_water for in_water, _ in heal), f"seed {seed}: no heal on the water")
+            self.assertTrue(any(not in_water for in_water, _ in heal), f"seed {seed}: no heal on land")
+            lava = self._islands(grid, (config.TILE_LAVA,))
+            self.assertFalse(any(in_water for in_water, _ in lava), f"seed {seed}: lava out in a lake")
+
+    def test_land_hazards_keep_out_of_the_shore_corridors(self):
+        for seed, grid in self._maps():
+            dist = _octile_distance(grid, config.TILE_WATER)
+            for in_water, group in self._islands(grid, (config.TILE_LAVA, config.TILE_RADIOACTIVE)):
+                if in_water:
+                    continue
+                for c, r in group:
+                    self.assertGreater(dist[r][c], SHORE_WALL_DISTANCE[1] - 0.5, f"seed {seed} at {(c, r)}")
 
     def test_tile_budgets(self):
         cells = interior()

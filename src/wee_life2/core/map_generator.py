@@ -2,10 +2,11 @@
 
 The board is grown from a fractal Perlin-noise height field instead of
 scattering tiles independently: low ground floods into lakes (and the hills
-left standing inside them become islands), long one-tile-thick wall lines are
-drawn across the land -- some tracing the terrain's contours parallel to the
-shore, some straight, some as parallel pairs forming corridors -- and small
-hazard patches and heal oases are dropped onto the remaining land.  Every tile type is placed by
+left standing inside them become islands), most walls follow the coastline a
+few tiles inland so a corridor runs between them and the water, a smaller
+share are free-standing lines (contours, bent straight lines, corridor
+pairs), and small hazard patches and heal oases are dropped onto the
+remaining land.  Every tile type is placed by
 *share of the interior* rather than by per-tile probability, so a randomised
 board always lands inside the configured budget (e.g. 35-40% water) whatever
 the seed.
@@ -16,6 +17,7 @@ numpy and runs in a few tens of milliseconds.
 
 from __future__ import annotations
 
+import heapq
 import math
 import random
 from collections import deque
@@ -37,8 +39,16 @@ HEAL = config.TILE_HEAL
 # surroundings: single-tile puddles and specks read as noise, not terrain.
 MIN_LAKE_TILES = 4
 MIN_ISLAND_TILES = 3
-# Walls are long one-tile-thick strokes, like the hand-drawn built-in map,
-# not blobs.  Lengths are tiles of travel per stroke.
+# The main walls follow the coast: the outline of everything within
+# SHORE_WALL_DISTANCE tiles (octile, i.e. near-Euclidean distance) of the
+# water traces the coastline's shape, and segments of it become walls with
+# a corridor of SHORE_WALL_DISTANCE - 1 open tiles between them and the shore.
+SHORE_WALL_SHARE = 0.7  # share of the wall budget spent on coast-following walls
+SHORE_WALL_DISTANCE = (3, 4)  # one value drawn per map
+SHORE_WALL_LENGTH = (14, 26)  # tiles per coastal wall; a doorway separates consecutive ones
+MIN_SHORE_WALL = 8  # shorter coastal stretches are dropped
+# The rest of the budget goes on free-standing one-tile-thick strokes, like
+# the hand-drawn built-in map.  Lengths are tiles of travel per stroke.
 WALL_LINE_LENGTH = (16.0, 34.0)
 MIN_WALL_LINE = 8  # shorter strokes (clipped by the frame or water) are dropped
 # Share of strokes that trace a height contour from near the shore, so the
@@ -54,13 +64,15 @@ WALL_MAX_WATER = 0.4  # strokes running mostly through a lake are rejected
 # A new stroke may touch existing walls at a couple of cells (a T-junction or
 # crossing) but not run alongside one, which would thicken it into a blob.
 WALL_MAX_CONTACT = 2
-# Share of the hazard budget that becomes lava (seeded against walls, like
-# volcanic vents); the rest is radioactive ground.
-LAVA_SHARE = 0.35
-HAZARD_PATCH_SIZE = (3, 7)
-HEAL_PATCH_SIZE = (2, 4)
+# Hazards and heal come as a few larger islands spread across the board, not
+# a scatter of specks.  One hazard island is lava (on land, seeded against a
+# wall's landward side, like a volcanic vent); the others are radioactive.
+# At least one radioactive island and one heal oasis sit out in a lake.
+HAZARD_ISLANDS = (2, 3)  # the hazard budget is split into this many compact islands
+HEAL_ISLANDS = (2, 3)  # likewise for heal oases
+ISLAND_SEED_TRIES = 6  # seeds tried per island before keeping the biggest attempt
 # Heal oases keep this many tiles away from any hazard.
-HEAL_HAZARD_GAP = 3
+HEAL_HAZARD_GAP = 4
 # How far (in noise units) the low-frequency warp field bends the height
 # field's sample points; it makes coasts meander instead of following the
 # noise lattice.
@@ -159,24 +171,59 @@ def generate_terrain(
         return grid
     n = len(interior)
 
-    height = _height_field(cols, rows, rng)
-    _flood_lowlands(grid, height, interior, _budget(water_fraction, n))
-    _draw_wall_lines(grid, height, interior, _budget(wall_fraction, n), rng)
-    _connect_pockets(grid, interior)
-
-    hazard_total = _budget(hazard_fraction, n)
-    lava_total = round(hazard_total * LAVA_SHARE)
-    near_wall = [cell for cell in interior if grid[cell[1]][cell[0]] == EMPTY and _touches_inner_wall(grid, cell)]
-    _scatter_patches(grid, interior, LAVA, lava_total, HAZARD_PATCH_SIZE, rng, preferred=near_wall)
-    _scatter_patches(grid, interior, RADIOACTIVE, hazard_total - lava_total, HAZARD_PATCH_SIZE, rng)
-
+    # Plan the hazard and heal islands first: those placed out in a lake
+    # replace water, so that much extra lowland is flooded up front and the
+    # water share still lands on budget once they are in.
+    water_target = _budget(water_fraction, n)
+    hazard_count = rng.randint(*HAZARD_ISLANDS)
+    heal_count = rng.randint(*HEAL_ISLANDS)
     heal_total = _budget(heal_fraction, n)
     if heal_fraction > 0.0:
         heal_total = max(1, heal_total)
+    hazard_plan = _plan_islands([LAVA] + [RADIOACTIVE] * (hazard_count - 1), _budget(hazard_fraction, n), water_fraction, rng)
+    heal_plan = _plan_islands([HEAL] * heal_count, heal_total, water_fraction, rng)
+    reserve = sum(size for _, medium, size in hazard_plan + heal_plan if medium == WATER)
+
+    height = _height_field(cols, rows, rng)
+    _flood_lowlands(grid, height, interior, min(n, water_target + reserve))
+    wall_budget = _budget(wall_fraction, n)
+    placed = _draw_shore_walls(grid, interior, round(wall_budget * SHORE_WALL_SHARE), rng)
+    _draw_wall_lines(grid, height, interior, wall_budget - placed, rng)
+    _connect_pockets(grid, interior)
+
+    # Islands keep a third of the board apart.  On land, hazards stay out of
+    # the shore corridors (and off the beaches), where a blob would plug the
+    # way; in a lake, islands keep a tile of open water around them so they
+    # read as patches out on the water rather than stains on the shore.
+    spread = max(4, max(cols, rows) // 3)
+    shore = _distance_field(grid, (WATER,), _NEIGHBOURS_8)
+    inland = [cell for cell in interior if shore[cell[1]][cell[0]] > SHORE_WALL_DISTANCE[1]]
+    near_wall = [cell for cell in inland if _touches_inner_wall(grid, cell)]
+    land_dist = _distance_field(grid, (EMPTY, WALL), _NEIGHBOURS_8)
+    open_water = [cell for cell in interior if grid[cell[1]][cell[0]] == WATER and land_dist[cell[1]][cell[0]] >= 2]
+    _scatter_islands(
+        grid,
+        interior,
+        hazard_plan,
+        rng,
+        allowed={EMPTY: inland, WATER: open_water},
+        preferred={LAVA: near_wall},
+        spread=spread,
+    )
+
     hazard_dist = _distance_field(grid, (RADIOACTIVE, LAVA))
-    safe = [cell for cell in interior if hazard_dist[cell[1]][cell[0]] >= HEAL_HAZARD_GAP]
-    spread = max(4, max(cols, rows) // 5)
-    _scatter_patches(grid, interior, HEAL, heal_total, HEAL_PATCH_SIZE, rng, preferred=safe, allowed=safe, spread=spread)
+    safe = {cell for cell in interior if hazard_dist[cell[1]][cell[0]] >= HEAL_HAZARD_GAP}
+    _scatter_islands(
+        grid,
+        interior,
+        heal_plan,
+        rng,
+        allowed={EMPTY: [cell for cell in interior if cell in safe], WATER: [cell for cell in open_water if cell in safe]},
+        spread=spread,
+    )
+    # A water island that could not be placed (no lake big enough) went on
+    # land instead and left its reserve flooded; drain it off the coast.
+    _match_water_count(grid, height, interior, water_target)
     return grid
 
 
@@ -312,8 +359,12 @@ def _touches_inner_wall(grid: Grid, cell: Cell, neighbours=_NEIGHBOURS_4) -> boo
     return False
 
 
-def _distance_field(grid: Grid, tiles: tuple[int, ...]) -> list[list[float]]:
-    """4-connected tile distance from every tile to the nearest of ``tiles``."""
+def _distance_field(grid: Grid, tiles: tuple[int, ...], neighbours=_NEIGHBOURS_4) -> list[list[float]]:
+    """Tile distance from every tile to the nearest of ``tiles``.
+
+    4-connected (Manhattan-like) by default; pass ``_NEIGHBOURS_8`` for the
+    chessboard distance, whose level sets are closed staircases.
+    """
     rows = len(grid)
     cols = len(grid[0])
     dist = [[math.inf] * cols for _ in range(rows)]
@@ -326,12 +377,175 @@ def _distance_field(grid: Grid, tiles: tuple[int, ...]) -> list[list[float]]:
     while queue:
         col, row = queue.popleft()
         d = dist[row][col] + 1
-        for dc, dr in _NEIGHBOURS_4:
+        for dc, dr in neighbours:
             c, r = col + dc, row + dr
             if 0 <= c < cols and 0 <= r < rows and dist[r][c] > d:
                 dist[r][c] = d
                 queue.append((c, r))
     return dist
+
+
+def _draw_shore_walls(grid: Grid, interior: list[Cell], budget: int, rng: random.Random) -> int:
+    """Wall off stretches of coast a few tiles inland; return tiles walled.
+
+    The outline of the land within ``SHORE_WALL_DISTANCE`` (octile
+    distance) of the water repeats the coastline's shape: it is the land
+    just beyond that distance with a 4-neighbour inside it.  Gaps cut
+    every ``SHORE_WALL_SPACING`` tiles split it into segments, and random
+    segments become walls until ``budget`` is spent, so each lake gets a
+    few walled stretches with a corridor along the shore that opens at
+    both ends.
+    """
+    if budget <= 0:
+        return 0
+    dist = _octile_distance(grid, WATER)
+    gap = rng.randint(*SHORE_WALL_DISTANCE)
+    band = [
+        (col, row)
+        for col, row in interior
+        if grid[row][col] == EMPTY
+        and dist[row][col] >= gap
+        and any(dist[row + dr][col + dc] < gap for dc, dr in _NEIGHBOURS_4)
+    ]
+    if not band:
+        return 0
+    band_set = set(band)
+    # Where the outlines of two lakes run together (a neck of land, a bay)
+    # the band doubles up into 2x2 lumps; those junctions are left open.
+    junctions = [cell for cell in band if _has_lump(band_set, cell)]
+    cleared = {(c + dc, r + dr) for c, r in junctions for dc in (-1, 0, 1) for dr in (-1, 0, 1)}
+    # Walk each stretch of outline from end to end and cut it into walls of
+    # SHORE_WALL_LENGTH with a doorway between consecutive ones, so the
+    # corridor behind them can be entered along the way.
+    pieces: list[list[Cell]] = []
+    for group in _cell_groups(band_set - cleared):
+        path = _walk_path(_close_diagonals(group, grid, dist))
+        i = rng.randint(0, WALL_DOOR_WIDTH)
+        while i < len(path):
+            length = rng.randint(*SHORE_WALL_LENGTH)
+            pieces.append(path[i : i + length])
+            i += length + WALL_DOOR_WIDTH
+    # Longest stretches first (with a little jitter) so the budget goes on a
+    # few main coastal walls rather than many stubs.
+    pieces.sort(key=lambda piece: len(piece) + rng.uniform(0.0, 6.0), reverse=True)
+    placed = 0
+    for piece in pieces:
+        piece = piece[: budget - placed]
+        if len(piece) < MIN_SHORE_WALL or _has_lump(set(piece)):
+            continue
+        if any(_touches_inner_wall(grid, cell, _NEIGHBOURS_8) for cell in piece):
+            continue
+        for col, row in piece:
+            grid[row][col] = WALL
+        placed += len(piece)
+    return placed
+
+
+def _octile_distance(grid: Grid, tile: int) -> list[list[float]]:
+    """Distance to the nearest ``tile`` with steps costing 1 straight, sqrt(2) diagonal.
+
+    A close stand-in for Euclidean distance, so offset outlines follow the
+    coast's curves instead of squaring off like chessboard rings.
+    """
+    rows = len(grid)
+    cols = len(grid[0])
+    dist = [[math.inf] * cols for _ in range(rows)]
+    heap = []
+    for row in range(rows):
+        for col in range(cols):
+            if grid[row][col] == tile:
+                dist[row][col] = 0.0
+                heap.append((0.0, col, row))
+    heapq.heapify(heap)
+    while heap:
+        d, col, row = heapq.heappop(heap)
+        if d > dist[row][col]:
+            continue
+        for dc, dr in _NEIGHBOURS_8:
+            c, r = col + dc, row + dr
+            if 0 <= c < cols and 0 <= r < rows:
+                nd = d + (1.0 if dc == 0 or dr == 0 else math.sqrt(2.0))
+                if nd < dist[r][c]:
+                    dist[r][c] = nd
+                    heapq.heappush(heap, (nd, c, r))
+    return dist
+
+
+def _cell_groups(cells: set[Cell]) -> list[list[Cell]]:
+    """8-connected groups of ``cells`` (in a stable order for a given seed)."""
+    seen: set[Cell] = set()
+    groups = []
+    for start in sorted(cells):
+        if start in seen:
+            continue
+        seen.add(start)
+        group = [start]
+        stack = [start]
+        while stack:
+            col, row = stack.pop()
+            for dc, dr in _NEIGHBOURS_8:
+                nxt = (col + dc, row + dr)
+                if nxt in cells and nxt not in seen:
+                    seen.add(nxt)
+                    group.append(nxt)
+                    stack.append(nxt)
+        groups.append(group)
+    return groups
+
+
+def _close_diagonals(segment: list[Cell], grid: Grid, dist: list[list[float]]) -> list[Cell]:
+    """Fill the corner of every diagonal-only joint so the wall has no slit.
+
+    The landward corner (larger distance from the water) is preferred, so
+    the shore corridor keeps its width, unless it would complete a 2x2 lump.
+    """
+    cells = set(segment)
+    for col, row in segment:
+        for dc, dr in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+            if (col + dc, row + dr) not in cells:
+                continue
+            a, b = (col + dc, row), (col, row + dr)
+            if a in cells or b in cells:
+                continue
+            options = [corner for corner in (a, b) if grid[corner[1]][corner[0]] == EMPTY]
+            options.sort(key=lambda corner: (_has_lump(cells | {corner}, corner), -dist[corner[1]][corner[0]]))
+            if options:
+                cells.add(options[0])
+    return sorted(cells)
+
+
+def _walk_path(cells: list[Cell]) -> list[Cell]:
+    """Order a thin 4-connected stroke from one end to the other.
+
+    Starts at an end (a cell with at most one neighbour in the stroke; any
+    cell of a closed ring) and follows unvisited neighbours.  A rare branch
+    left over is dropped rather than walked.
+    """
+    cell_set = set(cells)
+
+    def neighbours(cell: Cell) -> list[Cell]:
+        return [(cell[0] + dc, cell[1] + dr) for dc, dr in _NEIGHBOURS_4 if (cell[0] + dc, cell[1] + dr) in cell_set]
+
+    ends = [cell for cell in cells if len(neighbours(cell)) <= 1]
+    path = [ends[0] if ends else cells[0]]
+    seen = {path[0]}
+    while True:
+        options = [cell for cell in neighbours(path[-1]) if cell not in seen]
+        if not options:
+            return path
+        path.append(options[0])
+        seen.add(options[0])
+
+
+def _has_lump(cells: set[Cell], at: Cell | None = None) -> bool:
+    """True if ``cells`` contain a 2x2 block (one that includes ``at``, if given)."""
+    corners = [at] if at is not None else cells
+    for col, row in corners:
+        for dc, dr in ((0, 0), (-1, 0), (0, -1), (-1, -1)):
+            c, r = col + dc, row + dr
+            if {(c, r), (c + 1, r), (c, r + 1), (c + 1, r + 1)} <= cells:
+                return True
+    return False
 
 
 def _draw_wall_lines(grid: Grid, height: list[list[float]], interior: list[Cell], budget: int, rng: random.Random) -> None:
@@ -592,65 +806,183 @@ def _connect_pockets(grid: Grid, interior: list[Cell]) -> None:
                     grid[r][c] = EMPTY
 
 
-def _scatter_patches(
+def _plan_islands(kinds: list[int], total: int, water_fraction: float, rng: random.Random) -> list[tuple[int, int, int]]:
+    """Split ``total`` tiles into one ``(tile, medium, size)`` island per kind.
+
+    ``medium`` is what the island replaces: open land (``EMPTY``) or open
+    water.  Lava always sits on land; of the rest, the first goes out on the
+    water (so lakes get hazards and heal too, not only the land) and any
+    further one lands in water with the board's water share as probability.
+    """
+    plan = []
+    base, extra = divmod(max(0, total), max(1, len(kinds)))
+    water_left = 1 if water_fraction > 0.0 else 0
+    for i, kind in enumerate(kinds):
+        size = base + (1 if i < extra else 0)
+        medium = EMPTY
+        if kind != LAVA and water_fraction > 0.0:
+            if i > 0 and water_left:
+                medium = WATER
+                water_left = 0
+            elif i > 0 and rng.random() < water_fraction:
+                medium = WATER
+        plan.append((kind, medium, size))
+    return plan
+
+
+def _scatter_islands(
     grid: Grid,
     interior: list[Cell],
-    tile: int,
-    total: int,
-    size_range: tuple[int, int],
+    islands: list[tuple[int, int, int]],
     rng: random.Random,
     *,
-    preferred: list[Cell] | None = None,
-    allowed: list[Cell] | None = None,
+    allowed: dict[int, list[Cell]],
+    preferred: dict[int, list[Cell]] | None = None,
     spread: int = 3,
 ) -> None:
-    """Drop ``total`` tiles of ``tile`` onto open land as small organic blobs.
+    """Grow one compact island per planned ``(tile, medium, size)``.
 
-    Seeds come from ``preferred`` cells when any are still open, and keep
-    ``spread`` tiles (Chebyshev) from earlier seeds of this call so patches
-    are scattered across the map rather than merged into one pool; the gap
-    is relaxed if the map runs out of room.  ``allowed`` restricts growth.
+    Seeds come from ``preferred[tile]`` cells when any are still open, and
+    keep ``spread`` tiles (Chebyshev) from every earlier seed of this call so
+    the islands sit apart instead of merging.  An island grows only into
+    ``allowed[medium]`` cells, falling back to any cell of its medium if
+    those are used up; a water island with no lake to sit in goes on land.
+    """
+    seeds: list[Cell] = []
+    for tile, medium, size in islands:
+        if size <= 0:
+            continue
+        for where in (medium, EMPTY) if medium == WATER else (medium,):
+            blob = _best_island(
+                grid, interior, tile, where, size, rng, allowed.get(where), (preferred or {}).get(tile), seeds, spread
+            )
+            if blob:
+                seeds.append(blob[0])
+                break
+
+
+def _best_island(grid, interior, tile, medium, size, rng, allowed, preferred, seeds, spread) -> list[Cell]:
+    """Grow the best of a few attempts at one island; return its cells.
+
+    A seed boxed in by walls or the shore grows a stunted island or a strip
+    along a corridor, so a few seeds are tried and the first good island
+    (or the best attempt) is kept; the others are reverted to ``medium``.
     """
     allowed_set = set(allowed) if allowed is not None else None
+    best: list[Cell] = []
+    best_quality = -1.0
+    tried: list[Cell] = []
+    for _ in range(ISLAND_SEED_TRIES):
+        start = None
+        for restrict in (allowed_set, None):
 
-    def open_land(cell: Cell) -> bool:
-        col, row = cell
-        if grid[row][col] != EMPTY:
-            return False
-        return allowed_set is None or cell in allowed_set
+            def open_cell(cell: Cell, restrict=restrict) -> bool:
+                return grid[cell[1]][cell[0]] == medium and (restrict is None or cell in restrict)
 
-    seeds: list[Cell] = []
-    placed = 0
-    gap = spread
-    while placed < total:
-        pool = [cell for cell in (preferred or interior) if open_land(cell)]
-        if not pool and preferred is not None and allowed_set is None:
-            pool = [cell for cell in interior if open_land(cell)]
-        pool = [cell for cell in pool if all(max(abs(cell[0] - s[0]), abs(cell[1] - s[1])) >= gap for s in seeds)]
-        if not pool:
-            if gap <= 1:
-                return
-            gap -= 1
-            continue
-        start = rng.choice(pool)
-        seeds.append(start)
-        size = min(rng.randint(*size_range), total - placed)
-        placed += _grow_patch(grid, start, size, tile, rng, open_land)
+            roomy = _roomy(grid, open_cell, size)
+            start = _pick_seed(interior, preferred, open_cell, seeds + tried, spread, rng, roomy)
+            if start is not None:
+                break
+        if start is None:
+            break
+        tried.append(start)
+        blob = _grow_patch(grid, start, size, tile, rng, open_cell)
+        quality = _island_quality(blob, size)
+        if quality > best_quality:
+            for col, row in best:
+                grid[row][col] = medium
+            best, best_quality = blob, quality
+        else:
+            for col, row in blob:
+                grid[row][col] = medium
+        if best_quality >= 0.8:
+            break
+    return best
 
 
-def _grow_patch(grid: Grid, start: Cell, size: int, tile: int, rng: random.Random, can_take) -> int:
-    """Grow a random 4-connected blob of up to ``size`` tiles from ``start``."""
+def _island_quality(blob: list[Cell], size: int) -> float:
+    """1.0 for a full-size island no more than twice as long as it is wide."""
+    width = max(c for c, _ in blob) - min(c for c, _ in blob) + 1
+    height = max(r for _, r in blob) - min(r for _, r in blob) + 1
+    elongation = max(width, height) / min(width, height)
+    return len(blob) / size * min(1.0, 2.0 / elongation)
+
+
+def _pick_seed(interior, preferred, open_land, seeds, spread, rng, roomy) -> Cell | None:
+    """A random open, roomy cell ``spread`` away from ``seeds``.
+
+    Keeping islands apart comes first: the gap may shrink to half of
+    ``spread`` with room required, then without it, and only then further,
+    so a crowded board still gets its islands without merging them.
+    """
+    gaps = range(spread, 0, -1)
+    tiers = ([g for g in gaps if g >= spread // 2], [g for g in gaps if g < spread // 2])
+    for tier, need_room in ((tiers[0], True), (tiers[0], False), (tiers[1], True), (tiers[1], False)):
+        for gap in tier:
+            for source in (preferred, interior):
+                if not source:
+                    continue
+                pool = [
+                    cell
+                    for cell in source
+                    if open_land(cell)
+                    and (not need_room or roomy(cell))
+                    and all(max(abs(cell[0] - s[0]), abs(cell[1] - s[1])) >= gap for s in seeds)
+                ]
+                if pool:
+                    return rng.choice(pool)
+    return None
+
+
+def _roomy(grid: Grid, open_land, size: int):
+    """Predicate: does the square around a cell hold enough open land for ``size``?
+
+    A summed-area table over ``open_land`` makes each query O(1).  Without
+    it an island seeded in a corridor between a wall and the frame grows
+    into a long strip instead of a blob.
+    """
+    rows = len(grid)
+    cols = len(grid[0])
+    table = [[0] * (cols + 1) for _ in range(rows + 1)]
+    for row in range(rows):
+        running = 0
+        for col in range(cols):
+            running += open_land((col, row))
+            table[row + 1][col + 1] = table[row][col + 1] + running
+    # The square must be mostly open, not merely hold ``size`` cells: half
+    # a square of frame or wall still fits the cells, but only as a strip.
+    radius = max(1, math.ceil(math.sqrt(size) / 2))
+    need = 0.75 * (2 * radius + 1) ** 2
+
+    def roomy(cell: Cell) -> bool:
+        c0 = max(0, cell[0] - radius)
+        r0 = max(0, cell[1] - radius)
+        c1 = min(cols, cell[0] + radius + 1)
+        r1 = min(rows, cell[1] + radius + 1)
+        return table[r1][c1] - table[r0][c1] - table[r1][c0] + table[r0][c0] >= need
+
+    return roomy
+
+
+def _grow_patch(grid: Grid, start: Cell, size: int, tile: int, rng: random.Random, can_take) -> list[Cell]:
+    """Grow a compact 4-connected blob of up to ``size`` tiles from ``start``.
+
+    Each step takes the open neighbour of the blob closest to the seed, with
+    a little jitter, so the island comes out roundish with a ragged edge
+    instead of a random-walk tendril.
+    """
     grid[start[1]][start[0]] = tile
     grown = 1
-    frontier = [start]
-    while grown < size and frontier:
-        col, row = rng.choice(frontier)
-        options = [(col + dc, row + dr) for dc, dr in _NEIGHBOURS_4 if can_take((col + dc, row + dr))]
+    blob = [start]
+    sc, sr = start
+    while grown < size:
+        options = {
+            (col + dc, row + dr) for col, row in blob for dc, dr in _NEIGHBOURS_4 if can_take((col + dc, row + dr))
+        }
         if not options:
-            frontier.remove((col, row))
-            continue
-        nxt = rng.choice(options)
+            break
+        nxt = min(options, key=lambda cell: math.hypot(cell[0] - sc, cell[1] - sr) + rng.uniform(0.0, 1.6))
         grid[nxt[1]][nxt[0]] = tile
-        frontier.append(nxt)
+        blob.append(nxt)
         grown += 1
-    return grown
+    return blob
