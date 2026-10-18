@@ -108,7 +108,7 @@ class MapEditor:
             self._apply_tool_at(pygame.mouse.get_pos(), config.TILE_EMPTY)
 
     def clear_map(self) -> None:
-        """Fill the whole board with empty tiles, keeping the border walls."""
+        """Fill the whole board with empty tiles (no wall frame)."""
         self.world.clear_map()
 
     def randomize(self) -> None:

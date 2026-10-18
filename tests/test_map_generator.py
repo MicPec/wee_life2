@@ -25,8 +25,26 @@ from wee_life2.core.tile_map import TileMap
 COLS, ROWS = 60, 45  # the default 1200x900 window at TILE_SIZE 20
 
 
-def interior(cols=COLS, rows=ROWS):
-    return [(c, r) for r in range(1, rows - 1) for c in range(1, cols - 1)]
+def board(cols=COLS, rows=ROWS):
+    """Every cell: generated boards have no wall frame."""
+    return [(c, r) for r in range(rows) for c in range(cols)]
+
+
+def padded(grid):
+    """``grid`` inside a ring of wall, the shape the generator's helpers work on.
+
+    Off the board is wall to an organism, and the internal helpers
+    (`_components`, `_connect_pockets`) rely on that ring for bounds.
+    """
+    cols = len(grid[0])
+    return [[config.TILE_WALL] * (cols + 2)] + [[config.TILE_WALL, *row, config.TILE_WALL] for row in grid] + [
+        [config.TILE_WALL] * (cols + 2)
+    ]
+
+
+def ring_interior(cols=COLS, rows=ROWS):
+    """The real board's cells, in ``padded`` coordinates."""
+    return [(c, r) for r in range(1, rows + 1) for c in range(1, cols + 1)]
 
 
 def share(grid, tile, cells):
@@ -34,11 +52,11 @@ def share(grid, tile, cells):
 
 
 def wall_lines(grid):
-    """Sizes of the 4-connected wall pieces inside the frame."""
+    """Sizes of the 4-connected wall pieces on the board."""
     rows, cols = len(grid), len(grid[0])
     seen = set()
     sizes = []
-    for start in interior(cols, rows):
+    for start in board(cols, rows):
         if start in seen or grid[start[1]][start[0]] != config.TILE_WALL:
             continue
         seen.add(start)
@@ -48,7 +66,7 @@ def wall_lines(grid):
             c, r = stack.pop()
             size += 1
             for nc, nr in ((c + 1, r), (c - 1, r), (c, r + 1), (c, r - 1)):
-                inside = 0 < nc < cols - 1 and 0 < nr < rows - 1
+                inside = 0 <= nc < cols and 0 <= nr < rows
                 if inside and (nc, nr) not in seen and grid[nr][nc] == config.TILE_WALL:
                     seen.add((nc, nr))
                     stack.append((nc, nr))
@@ -81,47 +99,50 @@ class TestGenerateTerrain(unittest.TestCase):
     def _maps(self):
         return self.maps
 
-    def test_border_is_wall(self):
-        for _, grid in self._maps():
-            self.assertTrue(all(t == config.TILE_WALL for t in grid[0] + grid[-1]))
-            self.assertTrue(all(row[0] == config.TILE_WALL and row[-1] == config.TILE_WALL for row in grid))
+    def test_board_has_no_wall_frame(self):
+        """Lakes and land run to the edge; the board edge itself blocks organisms."""
+        edge_tiles = []
+        for seed, grid in self._maps():
+            edge = grid[0] + grid[-1] + [row[0] for row in grid] + [row[-1] for row in grid]
+            self.assertLess(edge.count(config.TILE_WALL) / len(edge), 0.2, f"seed {seed}: walled edge")
+            edge_tiles += edge
+        self.assertIn(config.TILE_WATER, edge_tiles)
+        self.assertIn(config.TILE_EMPTY, edge_tiles)
 
     def test_water_share_stays_in_configured_band(self):
-        cells = interior()
+        cells = board()
         for seed, grid in self._maps():
             water = share(grid, config.TILE_WATER, cells)
             self.assertGreaterEqual(water, config.MAP_WATER_FRACTION_MIN - 1e-9, f"seed {seed}")
             self.assertLessEqual(water, config.MAP_WATER_FRACTION_MAX + 1e-9, f"seed {seed}")
 
     def test_explicit_water_fraction_is_exact(self):
-        cells = interior()
+        cells = board()
         grid = generate_terrain(COLS, ROWS, random.Random(5), water_fraction=0.30)
         self.assertEqual(sum(1 for c, r in cells if grid[r][c] == config.TILE_WATER), round(0.30 * len(cells)))
 
     def test_water_forms_lakes_not_specks(self):
         """The point of the generator: coherent bodies of water, not scatter."""
-        cells = interior()
         for seed, grid in self._maps():
-            lakes = _components(grid, cells, lambda t: t == config.TILE_WATER)
+            lakes = _components(padded(grid), ring_interior(), lambda t: t == config.TILE_WATER)
             biggest = max(len(lake) for lake in lakes)
             water = sum(len(lake) for lake in lakes)
             self.assertLess(len(lakes), 25, f"seed {seed}: {len(lakes)} separate water bodies")
             self.assertGreater(biggest, 0.25 * water, f"seed {seed}")
 
     def test_every_open_tile_is_reachable(self):
-        cells = interior()
         for seed, grid in self._maps():
-            walkable = _components(grid, cells, lambda t: t != config.TILE_WALL)
+            walkable = _components(padded(grid), ring_interior(), lambda t: t != config.TILE_WALL)
             self.assertEqual(len(walkable), 1, f"seed {seed}: walled-in pocket")
 
     def test_walls_are_thin_lines_not_blobs(self):
         """Walls are drawn as one-tile-thick strokes, like the built-in map."""
         for seed, grid in self._maps():
-            walls = sum(row[1:-1].count(config.TILE_WALL) for row in grid[1:-1])
+            walls = sum(row.count(config.TILE_WALL) for row in grid)
             lumps = sum(
                 1
-                for r in range(1, ROWS - 2)
-                for c in range(1, COLS - 2)
+                for r in range(ROWS - 1)
+                for c in range(COLS - 1)
                 if all(grid[r + dr][c + dc] == config.TILE_WALL for dc in (0, 1) for dr in (0, 1))
             )
             self.assertLessEqual(lumps, 0.02 * walls, f"seed {seed}: {lumps} 2x2 wall lumps")
@@ -136,7 +157,7 @@ class TestGenerateTerrain(unittest.TestCase):
         shares = []
         for seed, grid in self._maps():
             dist = _octile_distance(grid, config.TILE_WATER)
-            walls = [(c, r) for c, r in interior() if grid[r][c] == config.TILE_WALL]
+            walls = [(c, r) for c, r in board() if grid[r][c] == config.TILE_WALL]
             low, high = SHORE_WALL_DISTANCE
             coastal = sum(1 for c, r in walls if low <= dist[r][c] < high + 1.5)
             shares.append(coastal / len(walls))
@@ -146,23 +167,25 @@ class TestGenerateTerrain(unittest.TestCase):
     def test_hazards_and_heal_come_as_a_few_compact_islands(self):
         for seed, grid in self._maps():
             for tiles, (low, high) in (((config.TILE_LAVA, config.TILE_RADIOACTIVE), HAZARD_ISLANDS), ((config.TILE_HEAL,), HEAL_ISLANDS)):
-                groups = _cell_groups({(c, r) for c, r in interior() if grid[r][c] in tiles})
+                groups = _cell_groups({(c, r) for c, r in board() if grid[r][c] in tiles})
                 self.assertGreaterEqual(len(groups), low, f"seed {seed}: {tiles}")
                 self.assertLessEqual(len(groups), high, f"seed {seed}: {tiles}")
                 for group in groups:
                     width = max(c for c, _ in group) - min(c for c, _ in group) + 1
                     height = max(r for _, r in group) - min(r for _, r in group) + 1
                     self.assertLessEqual(max(width, height) / min(width, height), 4.0, f"seed {seed}: strip-like island")
-            lava = _cell_groups({(c, r) for c, r in interior() if grid[r][c] == config.TILE_LAVA})
+            lava = _cell_groups({(c, r) for c, r in board() if grid[r][c] == config.TILE_LAVA})
             self.assertEqual(len(lava), 1, f"seed {seed}: one lava island")
 
     def _islands(self, grid, tiles):
         """(sits_in_water, cells) per 8-connected island of ``tiles``."""
         out = []
-        for group in _cell_groups({(c, r) for c, r in interior() if grid[r][c] in tiles}):
+        for group in _cell_groups({(c, r) for c, r in board() if grid[r][c] in tiles}):
             cells = set(group)
+            # Off the board counts as wall, so an island against the edge is
+            # never mistaken for one sitting out on the water.
             around = {
-                grid[r + dr][c + dc]
+                grid[r + dr][c + dc] if 0 <= r + dr < len(grid) and 0 <= c + dc < len(grid[0]) else config.TILE_WALL
                 for c, r in group
                 for dc, dr in ((1, 0), (-1, 0), (0, 1), (0, -1))
                 if (c + dc, r + dr) not in cells
@@ -192,7 +215,7 @@ class TestGenerateTerrain(unittest.TestCase):
                     self.assertGreater(dist[r][c], HAZARD_SHORE_GAP, f"seed {seed} at {(c, r)}")
 
     def test_tile_budgets(self):
-        cells = interior()
+        cells = board()
         for seed, grid in self._maps():
             walls = share(grid, config.TILE_WALL, cells)
             hazards = share(grid, config.TILE_LAVA, cells) + share(grid, config.TILE_RADIOACTIVE, cells)
@@ -206,7 +229,7 @@ class TestGenerateTerrain(unittest.TestCase):
             self.assertGreater(share(grid, config.TILE_EMPTY, cells), 0.45, f"seed {seed}")
 
     def test_heal_oases_keep_away_from_hazards(self):
-        cells = interior()
+        cells = board()
         hazards = (config.TILE_LAVA, config.TILE_RADIOACTIVE)
         for seed, grid in self._maps():
             for c, r in cells:
@@ -243,7 +266,7 @@ class TestGenerateTerrain(unittest.TestCase):
         try:
             config.MAP_WATER_FRACTION_MIN = config.MAP_WATER_FRACTION_MAX = 0.2
             grid = generate_terrain(COLS, ROWS, random.Random(1))
-            self.assertAlmostEqual(share(grid, config.TILE_WATER, interior()), 0.2, delta=0.001)
+            self.assertAlmostEqual(share(grid, config.TILE_WATER, board()), 0.2, delta=0.001)
         finally:
             config.MAP_WATER_FRACTION_MIN, config.MAP_WATER_FRACTION_MAX = old
 
@@ -269,14 +292,14 @@ class TestWallStrokes(unittest.TestCase):
 
 class TestConnectPockets(unittest.TestCase):
     def test_carves_a_ring_of_rock_open(self):
-        tile_map = TileMap(200, 200, tile_size=20)
+        tile_map = TileMap(160, 160, tile_size=20)
         tile_map.clear_map()
-        grid = tile_map.tiles
-        for c in range(3, 8):
-            for r in range(3, 8):
-                if c in (3, 7) or r in (3, 7):
-                    grid[r][c] = config.TILE_WALL
-        cells = interior(10, 10)
+        for c in range(2, 7):
+            for r in range(2, 7):
+                if c in (2, 6) or r in (2, 6):
+                    tile_map.set_tile(c, r, config.TILE_WALL)
+        grid = padded(tile_map.tiles)
+        cells = ring_interior(8, 8)
         self.assertEqual(len(_components(grid, cells, lambda t: t != config.TILE_WALL)), 2)
         _connect_pockets(grid, cells)
         self.assertEqual(len(_components(grid, cells, lambda t: t != config.TILE_WALL)), 1)

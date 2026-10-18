@@ -27,21 +27,23 @@ class TestTileMap(unittest.TestCase):
         self.assertEqual(self.tile_map.tile_at((-20, 50)), config.TILE_WALL)
         self.assertEqual(self.tile_map.tile_at((250, 50)), config.TILE_WALL)
 
-    def test_generate_map_has_border_walls(self):
-        self.tile_map.generate_map()
-        for col in range(self.tile_map.cols):
-            self.assertEqual(self.tile_map.tiles[0][col], config.TILE_WALL)
-            self.assertEqual(self.tile_map.tiles[-1][col], config.TILE_WALL)
-        for row in range(self.tile_map.rows):
-            self.assertEqual(self.tile_map.tiles[row][0], config.TILE_WALL)
-            self.assertEqual(self.tile_map.tiles[row][-1], config.TILE_WALL)
+    def test_generate_map_has_no_wall_frame(self):
+        """Terrain runs to the edge; off the board already counts as wall."""
+        self.tile_map.generate_map(seed=1, wall_fraction=0.0)
+        edge = (
+            self.tile_map.tiles[0]
+            + self.tile_map.tiles[-1]
+            + [row[0] for row in self.tile_map.tiles]
+            + [row[-1] for row in self.tile_map.tiles]
+        )
+        self.assertNotIn(config.TILE_WALL, edge)
+        self.assertEqual(self.tile_map.tile_at((-25.0, 10.0)), config.TILE_WALL)
 
-    def test_clear_map_keeps_borders(self):
+    def test_clear_map_empties_the_whole_board(self):
         self.tile_map.generate_map()
         self.tile_map.clear_map()
-        for row in range(1, self.tile_map.rows - 1):
-            for col in range(1, self.tile_map.cols - 1):
-                self.assertEqual(self.tile_map.tiles[row][col], config.TILE_EMPTY)
+        for row in self.tile_map.tiles:
+            self.assertEqual(row, [config.TILE_EMPTY] * self.tile_map.cols)
 
     def test_is_wall_circle(self):
         self.tile_map.set_tile(1, 1, config.TILE_WALL)

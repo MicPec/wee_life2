@@ -350,13 +350,13 @@ class TileMap:
         self._obstacles_generated = True
 
     def clear_map(self) -> None:
-        """Clear the board, keeping the border walls."""
-        for row in range(self.rows):
-            for col in range(self.cols):
-                if row == 0 or row == self.rows - 1 or col == 0 or col == self.cols - 1:
-                    self.tiles[row][col] = self.TILE_WALL
-                else:
-                    self.tiles[row][col] = self.TILE_EMPTY
+        """Clear the whole board to empty tiles.
+
+        No wall frame is kept: the board's edge already blocks organisms
+        (``tile_at`` treats everything off the board as wall).
+        """
+        for row in self.tiles:
+            row[:] = [self.TILE_EMPTY] * self.cols
 
     def load_tiles(self, tiles: list[list[int]]) -> None:
         """Replace the board with a saved tile layout."""

@@ -55,7 +55,7 @@ MIN_SHORE_WALL = 8  # shorter coastal stretches are dropped
 # The rest of the budget goes on free-standing one-tile-thick strokes, like
 # the hand-drawn built-in map.  Lengths are tiles of travel per stroke.
 WALL_LINE_LENGTH = (16.0, 34.0)
-MIN_WALL_LINE = 8  # shorter strokes (clipped by the frame or water) are dropped
+MIN_WALL_LINE = 8  # shorter strokes (clipped by the board edge or water) are dropped
 # Share of strokes that trace a height contour from near the shore, so the
 # wall runs parallel to the coast and leaves a corridor along it.
 WALL_CONTOUR_SHARE = 0.5
@@ -146,9 +146,10 @@ def generate_terrain(
     hazard_fraction: float | None = None,
     heal_fraction: float | None = None,
 ) -> Grid:
-    """Return a ``rows x cols`` tile grid with border walls and noise terrain.
+    """Return a ``rows x cols`` tile grid of noise terrain, with no wall frame.
 
-    Fractions are shares of the interior (everything inside the border wall).
+    Lakes and land run right to the board's edge.  Fractions are shares of
+    the whole board.
     ``None`` reads the ``MAP_*`` constants from ``config`` at call time, so
     ``--set``/``--config-file`` overrides apply; the water share is drawn
     uniformly from ``[MAP_WATER_FRACTION_MIN, MAP_WATER_FRACTION_MAX]``.
@@ -168,12 +169,18 @@ def generate_terrain(
     if heal_fraction is None:
         heal_fraction = config.MAP_HEAL_FRACTION
 
+    if cols <= 0 or rows <= 0:
+        return [[EMPTY] * max(cols, 0) for _ in range(max(rows, 0))]
+    # The board gets no wall frame, but the generator works on it padded with
+    # a one-tile ring of wall and crops the ring off at the end.  Off the
+    # board *is* wall to an organism (TileMap.tile_at), so the ring tells the
+    # wall, pocket and island logic the truth about the edge, and it keeps
+    # every neighbour lookup in bounds.
+    cols, rows = cols + 2, rows + 2
     grid = [
         [WALL if row in (0, rows - 1) or col in (0, cols - 1) else EMPTY for col in range(cols)] for row in range(rows)
     ]
     interior = [(col, row) for row in range(1, rows - 1) for col in range(1, cols - 1)]
-    if not interior:
-        return grid
     n = len(interior)
 
     # Plan the hazard and heal islands first: those placed out in a lake
@@ -229,7 +236,7 @@ def generate_terrain(
     # A water island that could not be placed (no lake big enough) went on
     # land instead and left its reserve flooded; drain it off the coast.
     _match_water_count(grid, height, interior, water_target)
-    return grid
+    return [line[1:-1] for line in grid[1:-1]]
 
 
 def _budget(fraction: float, n: int) -> int:
@@ -277,8 +284,8 @@ def _smooth_coast(grid: Grid, interior: list[Cell]) -> None:
         water = 0
         for dc, dr in _NEIGHBOURS_8:
             neighbour = grid[row + dr][col + dc]
-            # The border wall votes like the tile itself, so the frame does
-            # not drag the coast inward or outward.
+            # The padding ring votes like the tile itself, so the board edge
+            # does not drag the coast inward or outward.
             if neighbour == WALL:
                 neighbour = grid[row][col]
             water += neighbour == WATER
@@ -307,7 +314,7 @@ def _components(grid: Grid, interior: list[Cell], member) -> list[list[Cell]]:
                 if nxt in seen:
                     continue
                 tile = grid[nxt[1]][nxt[0]]
-                # The border is always wall, so membership alone keeps the
+                # The padding ring is always wall, so membership alone keeps the
                 # walk inside the interior for every non-wall predicate.
                 if member(tile) and tile != WALL:
                     seen.add(nxt)
@@ -353,7 +360,7 @@ def _touches(grid: Grid, cell: Cell, tile: int) -> bool:
 
 
 def _touches_inner_wall(grid: Grid, cell: Cell, neighbours=_NEIGHBOURS_4) -> bool:
-    """True if an *interior* wall (a wall line, not the frame) borders ``cell``."""
+    """True if an *interior* wall (a wall line, not the padding ring) borders ``cell``."""
     col, row = cell
     rows = len(grid)
     cols = len(grid[0])
@@ -756,7 +763,7 @@ def _cut_doorway(stroke: list[Cell], rng: random.Random) -> list[Cell]:
 def _connect_pockets(grid: Grid, interior: list[Cell]) -> None:
     """Carve the cheapest way out of every walled-in pocket to the main area.
 
-    Wall lines (with each other or the frame) can close a ring around a patch
+    Wall lines (with each other or the board edge) can close a ring around a patch
     of land; organisms spawned there could never leave.  A 0-1 BFS (wall
     costs 1, open ground 0) finds the path that removes the fewest walls.
     """
@@ -944,7 +951,7 @@ def _roomy(grid: Grid, open_land, size: int):
     """Predicate: does the square around a cell hold enough open land for ``size``?
 
     A summed-area table over ``open_land`` makes each query O(1).  Without
-    it an island seeded in a corridor between a wall and the frame grows
+    it an island seeded in a corridor between a wall and the board edge grows
     into a long strip instead of a blob.
     """
     rows = len(grid)
@@ -956,7 +963,7 @@ def _roomy(grid: Grid, open_land, size: int):
             running += open_land((col, row))
             table[row + 1][col + 1] = table[row][col + 1] + running
     # The square must be mostly open, not merely hold ``size`` cells: half
-    # a square of frame or wall still fits the cells, but only as a strip.
+    # a square of board edge or wall still fits the cells, but only as a strip.
     radius = max(1, math.ceil(math.sqrt(size) / 2))
     need = 0.75 * (2 * radius + 1) ** 2
 

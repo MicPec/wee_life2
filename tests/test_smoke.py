@@ -1,11 +1,13 @@
 """Smoke tests for the whole simulation."""
 
 import os
+import tempfile
 import unittest
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 from wee_life2.core import config
+from wee_life2.core.map_storage import MapStorage
 from wee_life2.simulation import Simulation
 
 
@@ -58,15 +60,24 @@ class TestSmoke(unittest.TestCase):
         finally:
             sim.renderer.close()
 
-    def test_world_generates_map_with_borders(self):
-        sim = Simulation(width=240.0, height=180.0)
-        border = 0
-        for row in sim.world.tiles:
-            for tile in row:
-                if tile == config.TILE_WALL:
-                    border += 1
-        self.assertGreater(border, 0)
-        sim.renderer.close()
+    def test_world_generates_a_map_when_none_is_saved(self):
+        """Without a saved map the simulation grows one (lakes and land, no frame).
+
+        The storage points at a path that does not exist: the default
+        `world_map.json` is whatever the developer last saved in the editor,
+        which made the old "has border walls" version of this test depend on
+        local state.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = MapStorage(os.path.join(tmp, "missing_map.json"))
+            sim = Simulation(width=240.0, height=180.0, storage=storage)
+        try:
+            tiles = [tile for row in sim.world.tiles for tile in row]
+            self.assertIn(config.TILE_WATER, tiles)
+            self.assertIn(config.TILE_EMPTY, tiles)
+            self.assertFalse(storage.exists(), "generating must not save over the map file")
+        finally:
+            sim.renderer.close()
 
 
 if __name__ == "__main__":
