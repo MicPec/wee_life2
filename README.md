@@ -502,6 +502,10 @@ not accidentally become attractors.
 |                | `cohesion`              | Steering weight toward the centroid of nearby kin                                                                     |
 |                | `size`                  | Visual size of the herd-instinct marker                                                                               |
 | `amphibious`   | `size`                  | Visual size of the amphibious marker                                                                                  |
+|                | `water_weight`          | Steering weight toward the nearest water at full urgency (drive fires only while on land)                             |
+|                | `base_pull`             | Fraction of `water_weight` felt on land even at full energy; 0 lets a well-fed carrier forage freely                  |
+|                | `search_range`          | How far the gene senses the nearest water tile (no `eye`/`scent` needed)                                              |
+|                | `urgency_threshold`     | Energy fraction below which the pull ramps from `base_pull` up to the full `water_weight`                             |
 | `venom`        | `toxicity`              | Damage per tick applied to prey bitten by the carrier's `jaw` (reduced by target's `toxin_resistance`)                |
 |                | `duration`              | Number of ticks the venom effect lasts on the target                                                                  |
 |                | `size`                  | Visual size of the venom gland                                                                                        |
@@ -544,7 +548,7 @@ not accidentally become attractors.
 | `fear`         | Detects threats and triggers escape                                                                              | Ear / fin             |
 | `touch`        | Feels nearby walls, hazards and (if not amphibious) water, steers away                                           | Whiskers              |
 | `herd`         | Attracts the organism toward same-species kin                                                                    | Small banner marker   |
-| `amphibious`   | Full-speed, safe movement in water; drains energy on land                                                        | Fin-like frill        |
+| `amphibious`   | Full-speed, safe movement in water; drains energy on land and pulls the carrier back to water                    | Fin-like frill        |
 | `venom`        | Injects poison into bitten prey, causing damage over time                                                        | Venom gland           |
 | `asexual`      | Clones itself periodically without needing a mate                                                                | Arrow-shaped node     |
 | `cannibal`     | Lets `jaw` prey on same-species kin (normally protected)                                                         | Dark marking          |
@@ -585,7 +589,7 @@ and turns away instead of pushing forward indefinitely.
 - Walls (`TILE_WALL`) block movement.
 - Radioactive tiles (`TILE_RADIOACTIVE`) drain energy unless resisted.
 - Lava tiles (`TILE_LAVA`) drain energy quickly.
-- Water tiles (`TILE_WATER`) slow and damage non-`amphibious` organisms; `amphibious` organisms move at full speed but slowly lose energy on land.
+- Water tiles (`TILE_WATER`) slow and damage non-`amphibious` organisms; `amphibious` organisms move at full speed but lose energy on land, so their gene steers them back to the nearest water (harder the hungrier they are).
 - Heal tiles (`TILE_HEAL`) restore `HEAL_ENERGY` per tick while an organism stands on them; organisms are only steered toward heal tiles when their energy is below the `heal_threshold` (50% by default).
 - Food / poison remains spawn when an organism dies, with probability `FOOD_ON_DEATH_CHANCE`.
 - Organisms can mate when mature and well-fed; the child inherits a crossed-over, mutated genome.

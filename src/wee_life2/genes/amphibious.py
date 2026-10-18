@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..core import config
 from .base import BodyPartBlueprint, Gene
 from .geometry import angle_diff, angle_to
 
@@ -19,36 +20,54 @@ class AmphibiousGene(Gene):
     suffer a speed penalty (``config.WATER_SPEED_PENALTY``) and slowly drain
     energy (``config.WATER_DROWN_DAMAGE``), see ``Organism.update``. With this
     gene, water is a safe niche: full speed and no drowning damage. The trade-off
-    is a speed and energy penalty on land.
+    is an energy drain on land (``config.AMPHIBIOUS_LAND_DRAIN``), which kills a
+    full-energy amphibian in well under half a minute.
 
-    The gene also emits a water-return drive: once energy falls below
-    ``urgency_threshold`` it steers toward ``World.nearest_water``, with the
-    weight ramping up as energy falls (same urgency pattern as
-    ``scent``'s ``heal_weight``/``heal_threshold``). The drive only fires for
-    carriers of an ``eye`` or ``scent`` gene -- a blind amphibian should not
-    magically sense water -- and only from the first ``amphibious`` gene in
-    the genome, so duplicates cannot stack copies of the same vector. Land
-    itself can never be a *sensed* hazard: ``first_interesting_tile_along_ray``
-    treats ``TILE_EMPTY`` as pass-through, so stopping rays on land would
-    blind every sense; heading home when drained is the workable version of
-    that idea. Honest caveat: water holds only about as much food as its
-    share of the map, so a starving amphibian trades the land drain for
-    poorer foraging; whether that nets out is left to selection on the three
-    heritable parameters below.
+    The gene therefore also emits a water-return drive whenever the organism
+    is on land: it steers toward ``World.nearest_water`` with weight
+    ``water_weight * (base_pull + (1 - base_pull) * urgency)``. ``base_pull``
+    keeps even a well-fed carrier tethered to the shore, and ``urgency`` ramps
+    from 0 to 1 as energy falls below ``urgency_threshold`` (same urgency
+    pattern as ``scent``'s ``heal_weight``/``heal_threshold``), so a drained
+    amphibian heads home over any food it sees. All four parameters are
+    heritable and bounded, so selection can loosen the tether (``base_pull``
+    toward 0) if foraging on land pays off.
+
+    Water is sensed by the gene itself (moist skin), not through ``eye`` or
+    ``scent``: gating the drive on a distance sense left every blind
+    amphibian to wander inland and die. ``search_range`` bounds that sense.
+    Only the first ``amphibious`` gene in the genome emits the drive, so
+    duplicates cannot stack copies of the same vector. Land itself can never
+    be a *sensed* hazard: ``first_interesting_tile_along_ray`` treats
+    ``TILE_EMPTY`` as pass-through, so stopping rays on land would blind every
+    sense.
     """
 
     kind = "amphibious"
     default_params = {
         "size": 7.0,
-        "water_weight": 0.9,  # steering weight toward water when the drive fires
-        "search_range": 220.0,  # how far nearest_water looks for a lake
-        "urgency_threshold": 0.5,  # energy fraction below which the organism heads home
+        "water_weight": 1.2,  # steering weight toward water at full urgency
+        "base_pull": 0.4,  # fraction of water_weight felt on land even when well-fed
+        "search_range": 240.0,  # how far the gene senses the nearest water
+        "urgency_threshold": 0.8,  # energy fraction below which the pull ramps up to full
     }
     param_bounds = {
         "water_weight": (0.0, 3.0),
+        "base_pull": (0.0, 1.0),
         "search_range": (0.0, 600.0),
         "urgency_threshold": (0.0, 1.0),
     }
+
+    # Ticks between nearest-water lookups. nearest_water scans a square of
+    # tiles around the organism, and the shore barely moves relative to an
+    # organism in a few ticks, so re-scanning every tick for every beached
+    # amphibian would be wasted work on the hot path.
+    RETARGET_TICKS = 10.0
+
+    def __init__(self, params=None) -> None:
+        super().__init__(params)
+        self._water_target: tuple[float, float] | None = None
+        self._retarget_in = 0.0
 
     def body_parts(self, base_color):
         return [
@@ -61,6 +80,15 @@ class AmphibiousGene(Gene):
             )
         ]
 
+    def water_pull(self, health: float) -> float:
+        """Steering weight toward water for an energy fraction ``health``."""
+        threshold = self.params["urgency_threshold"]
+        urgency = 0.0
+        if threshold > 0.0 and health < threshold:
+            urgency = min(1.0, (threshold - health) / threshold)
+        base = self.params["base_pull"]
+        return self.params["water_weight"] * (base + (1.0 - base) * urgency)
+
     def apply(self, organism: Organism, world: World, dt: float) -> None:
         organism.amphibious = True
 
@@ -70,32 +98,39 @@ class AmphibiousGene(Gene):
         if not amphibious_genes or amphibious_genes[0] is not self:
             return
 
-        # A blind amphibian should not magically sense water: the drive needs
-        # an eye or scent gene in the genome (checked via dna.genes, like the
-        # food-drive metabolism gate, so it is independent of gene order).
-        if not any(g.kind in ("eye", "scent") for g in organism.dna.genes):
-            return
-
         search_range = self.params["search_range"]
         if search_range <= 0.0:
             return  # range mutated away: a landlocked amphibian still pays upkeep
         if world.is_water(organism.position):
-            return  # already home
-        threshold = self.params["urgency_threshold"]
-        if threshold <= 0.0:
+            # Already home; look the shore up afresh once it leaves again.
+            self._retarget_in = 0.0
             return
+
         health = organism.energy / organism.max_energy if organism.max_energy > 0 else 0.0
-        if health >= threshold:
-            return  # well-fed: free to forage on land
-
-        target = world.nearest_water(organism.position, search_range)
-        if target is None:
+        weight = self.water_pull(health)
+        if weight <= 0.0:
             return
 
-        urgency = (threshold - health) / threshold
-        weight = self.params["water_weight"] * urgency
-        if weight <= 0.0:
+        target = self._find_water(organism.position, world, search_range, dt)
+        if target is None:
             return
         # Positive weight attracts: pass the un-reversed angle toward the
         # water (steering sign convention, AGENTS.md).
         organism.add_drive(angle_diff(angle_to(organism.position, target), organism.angle), weight, "water")
+
+    def _find_water(
+        self, position: tuple[float, float], world: World, search_range: float, dt: float
+    ) -> tuple[float, float] | None:
+        """Nearest water tile centre, re-scanned every ``RETARGET_TICKS``.
+
+        A miss (``None``) is cached too, so an amphibian stranded far from any
+        lake does not re-scan the whole square every tick. A cached target
+        that stopped being water (map edited) forces an immediate re-scan.
+        """
+        self._retarget_in -= dt * config.TICKS_PER_SECOND
+        target = self._water_target
+        if self._retarget_in <= 0.0 or (target is not None and not world.is_water(target)):
+            target = world.nearest_water(position, search_range)
+            self._water_target = target
+            self._retarget_in = self.RETARGET_TICKS
+        return target

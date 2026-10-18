@@ -227,7 +227,7 @@ class TestSenseThreatSelection(unittest.TestCase):
 
 
 class TestAmphibiousWaterReturn(unittest.TestCase):
-    """A drained amphibious steers back toward water (positive weight =
+    """An amphibious on land steers back toward water (positive weight =
     attraction; the angle toward the water is passed un-reversed)."""
 
     def setUp(self):
@@ -256,61 +256,101 @@ class TestAmphibiousWaterReturn(unittest.TestCase):
         # Water is on the right; a positive water_weight must turn right (< 0).
         self.assertLess(org.combined_drive(), -1.0)
 
-    def test_water_drive_also_fires_with_scent(self):
-        """Gate 3 accepts `scent` as well as `eye` -- not eye-only."""
+    def test_well_fed_amphibious_is_still_tethered_to_water(self):
+        """Land drains amphibians fast, so even a full one feels base_pull."""
         gene = AmphibiousGene()
-        org = self._organism([gene, ScentGene()])
+        org = self._organism([gene])
+        org.energy = org.max_energy
         self._water_east()
         gene.apply(org, self.world, 0.0)
+        self.assertEqual(len(org.drives), 1)
+        self.assertAlmostEqual(org.drives[0][1], gene.params["water_weight"] * gene.params["base_pull"])
         self.assertLess(org.combined_drive(), -1.0)
 
-    def test_well_fed_amphibious_has_no_water_drive(self):
-        gene = AmphibiousGene()
-        org = self._organism([gene, EyeGene()])
+    def test_zero_base_pull_frees_a_well_fed_amphibious(self):
+        """Selection can loosen the tether: base_pull 0 restores free foraging."""
+        gene = AmphibiousGene({"base_pull": 0.0})
+        org = self._organism([gene])
         org.energy = org.max_energy
         self._water_east()
         gene.apply(org, self.world, 0.0)
         self.assertFalse(org.drives)
 
-    def test_blind_amphibious_has_no_water_drive(self):
+    def test_blind_amphibious_still_senses_water(self):
+        """The gene senses water itself; an eye/scent gate stranded blind carriers."""
         gene = AmphibiousGene()
         org = self._organism([gene])  # no eye/scent in the genome
         self._water_east()
         gene.apply(org, self.world, 0.0)
-        self.assertFalse(org.drives)
+        self.assertLess(org.combined_drive(), -1.0)
 
     def test_no_drive_while_already_on_water(self):
         gene = AmphibiousGene()
         self._water_east()
-        org = self._organism([gene, EyeGene()], position=(250.0, 150.0))
+        org = self._organism([gene], position=(250.0, 150.0))
         gene.apply(org, self.world, 0.0)
         self.assertFalse(org.drives)
 
     def test_no_drive_when_no_water_in_range(self):
         gene = AmphibiousGene()
-        org = self._organism([gene, EyeGene()])
+        org = self._organism([gene])
         gene.apply(org, self.world, 0.0)
         self.assertFalse(org.drives)
 
     def test_zero_search_range_disables_without_crash(self):
         gene = AmphibiousGene({"search_range": 0.0})
-        org = self._organism([gene, EyeGene()])
+        org = self._organism([gene])
         self._water_east()
         gene.apply(org, self.world, 0.0)
         self.assertFalse(org.drives)
 
     def test_urgency_ramps_up_as_energy_falls(self):
-        self._water_east()
         gene = AmphibiousGene()
-        low = self._organism([gene, EyeGene()])
-        low.energy = 0.15 * low.max_energy
-        high = self._organism([gene, EyeGene()])
-        high.energy = 0.45 * high.max_energy
-        gene.apply(low, self.world, 0.0)
-        gene.apply(high, self.world, 0.0)
-        self.assertTrue(low.drives, "low-energy organism emitted no water drive")
-        self.assertTrue(high.drives, "high-energy organism emitted no water drive")
-        self.assertGreater(low.drives[-1][1], high.drives[-1][1])
+        full = gene.water_pull(1.0)
+        at_threshold = gene.water_pull(gene.params["urgency_threshold"])
+        half = gene.water_pull(0.4)
+        empty = gene.water_pull(0.0)
+        self.assertAlmostEqual(full, at_threshold)
+        self.assertGreater(half, at_threshold)
+        self.assertGreater(empty, half)
+        self.assertAlmostEqual(empty, gene.params["water_weight"])
+
+    def test_drained_pull_outweighs_a_seen_food_item(self):
+        """At low energy heading home must beat the strongest food drive."""
+        gene = AmphibiousGene()
+        scent_food_max = 0.8 * ScentGene.default_params["food_weight"]
+        self.assertGreater(gene.water_pull(0.1), scent_food_max)
+
+    def test_cached_target_is_rescanned_when_water_disappears(self):
+        gene = AmphibiousGene()
+        org = self._organism([gene])
+        self._water_east()
+        gene.apply(org, self.world, 0.0)
+        self.assertTrue(org.drives)
+        # Turn the lake into land; the cached target must not keep pulling.
+        self.world.set_tile(12, 7, config.TILE_EMPTY)
+        org.drives.clear()
+        gene.apply(org, self.world, 0.0)
+        self.assertFalse(org.drives)
+
+    def test_target_lookup_is_throttled(self):
+        gene = AmphibiousGene()
+        org = self._organism([gene])
+        self._water_east()
+        calls = []
+        real = self.world.nearest_water
+
+        def counting(pos, max_dist):
+            calls.append(pos)
+            return real(pos, max_dist)
+
+        self.world.nearest_water = counting
+        dt = 1.0 / config.TICKS_PER_SECOND
+        for _ in range(int(AmphibiousGene.RETARGET_TICKS)):
+            gene.apply(org, self.world, dt)
+        self.assertEqual(len(calls), 1)
+        gene.apply(org, self.world, dt)
+        self.assertEqual(len(calls), 2)
 
     def test_duplicate_amphibious_genes_emit_one_drive(self):
         g1 = AmphibiousGene()
@@ -324,10 +364,13 @@ class TestAmphibiousWaterReturn(unittest.TestCase):
         self.assertEqual(len(org.drives), 1)
 
     def test_water_drive_params_are_bounded(self):
-        gene = AmphibiousGene({"urgency_threshold": 5.0, "water_weight": -3.0, "search_range": -10.0})
+        gene = AmphibiousGene(
+            {"urgency_threshold": 5.0, "water_weight": -3.0, "search_range": -10.0, "base_pull": 2.0}
+        )
         self.assertEqual(gene.params["urgency_threshold"], 1.0)
         self.assertEqual(gene.params["water_weight"], 0.0)
         self.assertEqual(gene.params["search_range"], 0.0)
+        self.assertEqual(gene.params["base_pull"], 1.0)
 
 
 class TestHealTile(unittest.TestCase):
