@@ -79,6 +79,25 @@ class TestSmoke(unittest.TestCase):
         finally:
             sim.renderer.close()
 
+    def test_fresh_game_ignores_the_saved_map(self):
+        """A new game starts on a random board even when a saved map exists;
+        the saved one is only loaded when explicitly asked (random_map=False)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            storage = MapStorage(os.path.join(tmp, "world_map.json"))
+            # An all-heal board can never come out of generate_map.
+            heal_map = [[config.TILE_HEAL] * 12 for _ in range(9)]
+            storage.save(heal_map)
+            sim = Simulation(width=240.0, height=180.0, storage=storage, random_map=True)
+            try:
+                self.assertNotEqual(sim.world.save_tiles(), heal_map)
+            finally:
+                sim.renderer.close()
+            sim = Simulation(width=240.0, height=180.0, storage=storage, random_map=False)
+            try:
+                self.assertEqual(sim.world.save_tiles(), heal_map)
+            finally:
+                sim.renderer.close()
+
 
 if __name__ == "__main__":
     unittest.main()

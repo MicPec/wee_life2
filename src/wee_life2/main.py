@@ -197,5 +197,8 @@ def main() -> None:
                 width=float(args.width),
                 height=float(args.height),
                 storage=storage,
+                # A fresh game always gets a fresh board; a saved map is only
+                # loaded when --map-file names it explicitly.
+                random_map=args.map_file is None,
             )
         sim.run()

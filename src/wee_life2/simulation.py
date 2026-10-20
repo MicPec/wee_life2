@@ -32,8 +32,8 @@ class Simulation:
 
     # Fraction of the world's organism cap seeded at the start of a run, and
     # how much food is scattered per seeded organism.
-    INITIAL_POPULATION_FRACTION = 0.20
-    INITIAL_FOOD_PER_ORGANISM = 1.4
+    INITIAL_POPULATION_FRACTION = 0.25
+    INITIAL_FOOD_PER_ORGANISM = 1.2
 
     def __init__(
         self,
@@ -41,11 +41,12 @@ class Simulation:
         height: float = config.WORLD_HEIGHT,
         storage: MapStorage | None = None,
         snapshot: dict[str, Any] | None = None,
+        random_map: bool = True,
     ) -> None:
         self.world = World(width, height)
         self.storage = storage or MapStorage()
         if snapshot is None:
-            saved = self.storage.load()
+            saved = self.storage.load() if not random_map else None
             if saved:
                 self.world.load_tiles(saved)
             else:

@@ -2,7 +2,7 @@
 
 ## Commands
 
-- Run the simulation: `uv run wee-life2`
+- Run the simulation: `uv run wee-life2` (always starts on a fresh random map; a saved `world_map.json` is only loaded when named explicitly via `--map-file` — `Simulation(random_map=True)` skips `storage.load()`, and `--load-snapshot` still takes precedence over both)
 - Run with custom size: `uv run wee-life2 --width 800 --height 600`
 - Headless smoke test: `SDL_VIDEODRIVER=dummy timeout 10 uv run wee-life2`
 - Compile check: `uv run python -m compileall src`
