@@ -102,6 +102,7 @@ class Organism:
         self.has_metabolism: bool = False
         self.bioluminescence: float = 0.0
         self.pheromone_strength: float = 0.0
+        self.pheromone_range: float = 0.0
         self.alarm_level: float = 0.0
         self.seen_target: str | None = None
         self.wander_angle: float = self.angle
@@ -302,6 +303,7 @@ class Organism:
 
         # Aggregate traits genes add into (neutral baselines)
         self.pheromone_strength = 0.0
+        self.pheromone_range = 0.0
         self.radiation_resistance = 0.0
         self.upkeep_efficiency = 1.0
         self.armor_value = 0.0

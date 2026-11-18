@@ -3,6 +3,7 @@
 import math
 import random
 import unittest
+from unittest.mock import patch
 
 from wee_life2.core import config
 from wee_life2.core.dna import DNA
@@ -133,6 +134,27 @@ class TestWorld(unittest.TestCase):
         b_disp = math.hypot(b.position[0] - b_start[0], b.position[1] - b_start[1])
         self.assertAlmostEqual(a_disp, overlap / 2, places=6)
         self.assertAlmostEqual(b_disp, overlap / 2, places=6)
+
+    def test_pheromone_boosts_mating_chance(self):
+        """A roll between the plain and the boosted rate mates only when a
+        partner emits pheromones."""
+        # Empty genomes: diversity 0 and no asexual multiplier, so the only
+        # factor in play is the pheromone bonus.
+        dna = DNA([])
+        a = Organism(dna, (100.0, 100.0))
+        b = Organism(dna, (100.0 + a.radius * 0.5, 100.0))
+        for o in (a, b):
+            o.energy = 200.0
+            o.age = o.maturity_min_age + 1
+        self.world.add_organism(a)
+        self.world.add_organism(b)
+        # The roll lands between the plain rate and the fully-boosted rate.
+        boosted = config.MATING_RATE * (1.0 + config.PHEROMONE_MATING_BONUS)
+        roll = (config.MATING_RATE + boosted) / 2
+        with patch("random.random", return_value=roll):
+            self.assertIsNone(self.world._try_mating(a, b))
+            a.pheromone_strength = 1.0
+            self.assertIsNotNone(self.world._try_mating(a, b))
 
     def test_stats(self):
         stats = self.world.stats()

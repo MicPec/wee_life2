@@ -51,6 +51,7 @@ ENERGY_TO_MATE = 35.0  # minimum energy required to be eligible for mating
 REFERENCE_BODY_MASS = 200.0  # body mass (sum of body part areas) treated as mass ratio 1.0
 MASS_UPKEEP_FACTOR = 1.0  # how strongly body mass scales idle upkeep (up when heavy, down when light; floored at 0)
 GENE_UPKEEP_COST = 0.005  # extra idle energy cost per tick for each gene in the genome
+REGENERATION_AGE_COST = 10.0  # ticks of extra ageing per unit of energy regeneration creates from nothing (the fat-reserve path is free)
 
 # Lifespan / reproduction
 MAX_GENES = 16  # hard cap on genome length; insertions are ignored once reached
@@ -65,6 +66,7 @@ MUTATION_STEP_FLOOR = 0.05  # minimum additive mutation scale; lets 0.0-valued p
 MUTATION_INSERTION_RATE = 0.05  # probability of adding a new gene during structural mutation
 CROSSOVER_BLEND_RATE = 0.5  # chance that a shared gene's parameters are averaged instead of copied
 MATING_RATE = 0.3  # probability that a collision between two eligible organisms results in mating
+PHEROMONE_MATING_BONUS = 1.0  # mating-chance multiplier gained per unit of the stronger partner's pheromone signal (1.0 -> up to 2x)
 MATING_DIVERSITY = 0.45  # maximum genome diversity allowed for two organisms to mate
 MATING_DENSITY_RADIUS = 80  # radius for checking local population density before mating
 MATING_DENSITY_LIMIT = 3  # maximum number of nearby organisms allowed for mating

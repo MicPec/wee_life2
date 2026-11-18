@@ -87,6 +87,22 @@ class ScentGene(Gene):
         def discount(target_pos):
             return sight_discount(world, pos, target_pos, is_amphibious=is_amphibious)
 
+        def mate_score(other, dist, range_inv):
+            # Pheromones increase attractiveness; `range_inv` is 1/range of
+            # whoever's range the distance is normalised against (this
+            # sensor's for nearby organisms, the emitter's pheromone reach
+            # for long-range signals).
+            nonlocal best, best_score
+            attract = 1.0 + 0.5 * other.pheromone_strength
+            base = mate_weight * (1 - dist * range_inv) * attract
+            if base > best_score:
+                d = discount(other.position)
+                s = base * d
+                if s > best_score:
+                    best_score = s
+                    diff = angle_diff(angle_to(pos, other.position), org_angle)
+                    best = (diff + angle_noise(), "mate", mate_weight * attract * d)
+
         # Smell food / poison (organisms without a metabolism gene gain
         # nothing from eating, so they have no drive to seek it out)
         if has_metabolism:
@@ -123,16 +139,7 @@ class ScentGene(Gene):
             other_pos = other.position
 
             if self_can_mate and other.can_mate():
-                # Pheromones increase attractiveness
-                attract = 1.0 + 0.5 * other.pheromone_strength
-                base = mate_weight * (1 - dist * range_inv) * attract
-                if base > best_score:
-                    d = discount(other_pos)
-                    s = base * d
-                    if s > best_score:
-                        best_score = s
-                        diff = angle_diff(angle_to(pos, other_pos), org_angle)
-                        best = (diff + angle_noise(), "mate", mate_weight * attract * d)
+                mate_score(other, dist, range_inv)
 
             # Danger: avoid organisms with a clear aggression/energy advantage.
             if (
@@ -149,6 +156,25 @@ class ScentGene(Gene):
                     best_score = s
                     diff = angle_diff(angle_to(pos, other_pos), org_angle)
                     best = (diff + angle_noise(), "danger", danger_weight)
+
+        # Long-range mate attraction: pheromone signals carry well beyond
+        # this sensor's own range. The emitter list is rebuilt by the world
+        # once per tick (previous tick's strengths — the same kind of lag the
+        # spatial grid has). Range is normalised by the emitter's reach, so a
+        # weak far gland still loses to a close mate.
+        if self_can_mate:
+            for other in world.pheromone_emitters:
+                if other is organism or other.is_dead or not other.can_mate():
+                    continue
+                ox, oy = other.position
+                dx = ox - px
+                dy = oy - py
+                dist_sq = dx * dx + dy * dy
+                if dist_sq <= range_sq or dist_sq < 1:
+                    continue  # already scored in the nearby loop
+                if dist_sq > other.pheromone_range * other.pheromone_range:
+                    continue
+                mate_score(other, math.sqrt(dist_sq), 1.0 / other.pheromone_range)
 
         if best:
             diff, kind, weight = best

@@ -313,7 +313,7 @@ class TestEnergyBudget(unittest.TestCase):
             DNA(
                 [
                     FatGene({"storage": 0.8, "reserve_factor": 1.0}),  # never mobilises
-                    RegenerationGene({"rate": 0.5, "efficiency": 0.6, "threshold": 0.9}),
+                    RegenerationGene({"rate": 0.3, "efficiency": 0.6, "threshold": 0.9}),
                 ]
             ),
             (200.0, 150.0),
@@ -324,10 +324,144 @@ class TestEnergyBudget(unittest.TestCase):
         organism.energy = config.BASE_ENERGY * 1.8 * 0.2
         before = organism.energy + organism.fat_reserve
         organism.update(self.world, 1.0 / 60.0)
-        # heal = 0.5 * (0.9 - 0.2) = 0.35, taken entirely from the reserve
-        self.assertAlmostEqual(organism.fat_reserve, 10.0 - 0.35, places=5)
+        # heal = 0.3 * (0.9 - 0.2) = 0.21, taken entirely from the reserve
+        self.assertAlmostEqual(organism.fat_reserve, 10.0 - 0.21, places=5)
         # Total energy only dropped by upkeep; no free energy was created
         self.assertAlmostEqual(before - (organism.energy + organism.fat_reserve), organism.upkeep, places=5)
+
+    def test_regeneration_ambient_heal_ages_the_organism(self):
+        """Energy created from nothing is paid back in lifespan."""
+        gene = RegenerationGene({"rate": 0.2, "efficiency": 0.5, "threshold": 0.9})
+        organism = Organism(DNA([gene]), (200.0, 150.0))
+        self.world.add_organism(organism)
+        organism.fat_reserve = 0.0
+        organism.energy = organism.max_energy * 0.2
+        # One tick: heal = rate * (threshold - h), ambient = heal * efficiency
+        ambient = 0.2 * (0.9 - 0.2) * 0.5
+        organism.update(self.world, 1.0 / 60.0)
+        self.assertAlmostEqual(
+            organism.age, 1.0 + ambient * config.REGENERATION_AGE_COST, places=5
+        )
+
+    def test_regeneration_fat_path_does_not_age(self):
+        """Healing converted from the fat reserve stays free of the age cost."""
+        organism = Organism(
+            DNA([RegenerationGene({"rate": 0.2, "efficiency": 0.5, "threshold": 0.9})]),
+            (200.0, 150.0),
+        )
+        self.world.add_organism(organism)
+        organism.fat_reserve = 10.0  # covers the whole heal
+        organism.energy = organism.max_energy * 0.2
+        organism.update(self.world, 1.0 / 60.0)
+        self.assertAlmostEqual(organism.age, 1.0, places=5)
+
+    def test_regeneration_defaults_cannot_hold_energy_equilibrium(self):
+        """A single regeneration copy can no longer out-heal idle upkeep.
+
+        The old defaults produced ~0.09 free energy per tick at zero energy,
+        roughly 2x the whole idle upkeep, so carriers could never starve.
+        """
+        gene = RegenerationGene()
+        organism = Organism(
+            DNA(
+                [
+                    gene,
+                    MetabolismGene(),
+                    GENE_REGISTRY["leg"](),
+                    GENE_REGISTRY["eye"](),
+                    GENE_REGISTRY["scent"](),
+                    GENE_REGISTRY["jaw"](),
+                    GENE_REGISTRY["fear"](),
+                    GENE_REGISTRY["memory"](),
+                ]
+            ),
+            (100.0, 100.0),
+        )
+        # Max ambient trickle at zero energy: rate * threshold * efficiency.
+        max_ambient = gene.params["rate"] * gene.params["threshold"] * gene.params["efficiency"]
+        self.assertLess(max_ambient, organism.upkeep)
+
+    def _regen_organism(self, genes, health=0.2):
+        """Bare regeneration-carrier: no fat gene, so max_energy is the
+        base one and the deltas are attributable to the heal alone."""
+        organism = Organism(DNA(genes), (200.0, 150.0))
+        organism.energy = organism.max_energy * health
+        organism.velocity = (1.0, 0.0)
+        self.world.add_organism(organism)
+        return organism
+
+    def _tick(self, organism):
+        before = (organism.energy, organism.age)
+        organism.update(self.world, 1.0 / 60.0)
+        return (organism.energy - before[0], organism.age - before[1])
+
+    def test_regeneration_copies_do_not_stack(self):
+        """Two identical copies act exactly like one: same heal, same age
+        cost, velocity damped once (x0.95, not x0.9025)."""
+        def copy():
+            return RegenerationGene({"rate": 0.2, "efficiency": 0.5, "threshold": 0.9})
+
+        single = self._regen_organism([copy()])
+        double = self._regen_organism([copy(), copy()])
+        single_delta = self._tick(single)
+        double_delta = self._tick(double)
+        # The raw energy delta legitimately differs: the spare copy adds
+        # mass + GENE_UPKEEP_COST to upkeep. The HEAL (delta + upkeep) must
+        # be identical.
+        self.assertAlmostEqual(double_delta[0] + double.upkeep, single_delta[0] + single.upkeep, places=5)
+        self.assertAlmostEqual(double_delta[1], single_delta[1], places=5)
+        self.assertAlmostEqual(double.velocity[0], single.velocity[0], places=7)
+
+    def test_regeneration_best_copy_wins_not_sum_or_average(self):
+        """A strong + a weak copy heal exactly like the strong copy alone."""
+        def strong():
+            return RegenerationGene({"rate": 0.3, "efficiency": 0.5, "threshold": 0.9})
+
+        def weak():
+            return RegenerationGene({"rate": 0.05, "efficiency": 0.5, "threshold": 0.9})
+
+        alone = self._regen_organism([strong()])
+        pair = self._regen_organism([strong(), weak()])
+        self.assertAlmostEqual(
+            self._tick(pair)[0] + pair.upkeep, self._tick(alone)[0] + alone.upkeep, places=5
+        )
+
+    def test_regeneration_best_copy_depends_on_health(self):
+        """The winning copy is picked by rate*(threshold-h), so a high-rate
+        shallow copy wins badly hurt and a deep-threshold copy wins mid."""
+        eff = 0.5
+
+        def shallow():
+            return RegenerationGene({"rate": 0.3, "efficiency": eff, "threshold": 0.4})
+
+        def deep():
+            return RegenerationGene({"rate": 0.1, "efficiency": eff, "threshold": 0.8})
+
+        upkeep = self._regen_organism([shallow(), deep()]).upkeep
+
+        # h = 0.1: shallow scores 0.3*0.3=0.09 vs deep 0.1*0.7=0.07 -> shallow
+        hurt = self._regen_organism([shallow(), deep()], health=0.1)
+        delta = self._tick(hurt)[0]
+        ambient = 0.3 * (0.4 - 0.1) * eff
+        self.assertAlmostEqual(delta, ambient - upkeep, places=5)
+
+        # h = 0.5: shallow is above threshold, deep scores 0.1*0.3=0.03 -> deep
+        mid = self._regen_organism([shallow(), deep()], health=0.5)
+        delta = self._tick(mid)[0]
+        ambient = 0.1 * (0.8 - 0.5) * eff
+        self.assertAlmostEqual(delta, ambient - upkeep, places=5)
+
+    def test_regeneration_best_copy_is_order_independent(self):
+        """Gene order in the genome must not change which copy acts."""
+        def a():
+            return RegenerationGene({"rate": 0.3, "efficiency": 0.5, "threshold": 0.4})
+
+        def b():
+            return RegenerationGene({"rate": 0.1, "efficiency": 0.5, "threshold": 0.8})
+
+        forward = self._regen_organism([a(), b()], health=0.5)
+        swapped = self._regen_organism([b(), a()], health=0.5)
+        self.assertAlmostEqual(self._tick(forward)[0], self._tick(swapped)[0], places=5)
 
     def test_capped_bulk_still_costs_upkeep(self):
         """Mass is measured before the radius cap, so two organisms shrunk to

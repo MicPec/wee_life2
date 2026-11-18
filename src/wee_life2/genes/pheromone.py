@@ -21,12 +21,15 @@ class PheromoneGene(Gene):
     kind = "pheromone"
     default_params = {
         "strength": 0.5,
-        "range": 100.0,
-        "cost": 0.05,
+        "range": 300.0,  # how far scent carriers can smell the signal; must exceed scent's own range to extend it
+        "cost": 0.01,
         "size": 4.0,
         "side": 0.5,  # 0-1, body side the gland sits on (thresholded at 0.5)
     }
     param_bounds = {
+        "strength": (0.0, 1.0),  # the organism's total signal is clamped to 1.0 anyway
+        "range": (0.0, 400.0),
+        "cost": (0.0, 0.1),  # beyond this the gland alone outdrains idle upkeep many times over
         "side": (0.0, 1.0),
     }
 
@@ -49,4 +52,7 @@ class PheromoneGene(Gene):
         if organism.can_mate():
             strength = self.params["strength"] * (organism.energy / organism.max_energy)
             organism.pheromone_strength += strength
+            # Max, not additive: multiple glands stack signal strength but
+            # not its reach (like fat_capacity).
+            organism.pheromone_range = max(organism.pheromone_range, self.params["range"])
             organism.energy -= self.params["cost"] * dt * config.TICKS_PER_SECOND

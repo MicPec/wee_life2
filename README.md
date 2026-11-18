@@ -306,6 +306,7 @@ modify `core/config.py`.
 | `ENERGY_COST_MATE`      | `20.0`  | Energy deducted from each parent when mating succeeds                                                       |
 | `ENERGY_TO_MATE`        | `35.0`  | Minimum energy an organism needs before it is eligible to mate                                              |
 | `HEAL_ENERGY`           | `0.3`   | Energy restored per tick while standing on a heal tile                                                      |
+| `REGENERATION_AGE_COST` | `10.0`  | Ticks of extra ageing per unit of energy `regeneration` creates from nothing (the fat-reserve path is free) |
 
 ### Lifespan / reproduction
 
@@ -327,6 +328,7 @@ modify `core/config.py`.
 | `POPULATION_CAP`                | `0.1`   | Fraction of `cols × rows` tiles that sets `world.max_organisms`                                                                                                                                                                                       |
 | `SPECIES_CAP_FRACTION`          | `1.0`   | No single species can exceed this fraction of `max_organisms`                                                                                                                                                                                         |
 | `MATING_DEATH_CHANCE`           | `0.05`  | Probability one parent dies instead of reproducing when mating is attempted                                                                                                                                                                           |
+| `PHEROMONE_MATING_BONUS`        | `1.0`   | Mating-chance multiplier gained per unit of the stronger partner's `pheromone_strength` (1.0 → up to 2x)                                                                                                                                              |
 | `MAX_GENES`                     | `16`    | Hard cap on genome length; insertions are ignored once reached                                                                                                                                                                                        |
 
 ### Random spawn weighting
@@ -493,7 +495,7 @@ not accidentally become attractors.
 |                | `heal_threshold`        | Health fraction below which heal tiles are attractive                                                                 |
 |                | `terrain_rays`          | Number of rays cast around the organism (360° smell)                                                                  |
 | `pheromone`    | `strength`              | Base mating-signal strength (scaled by energy level)                                                                  |
-|                | `range`                 | (unused directly by scent yet; reserved signal range)                                                                 |
+|                | `range`                 | How far `scent` carriers can smell the signal beyond their own detection range                                        |
 |                | `cost`                  | Energy cost per second while emitting                                                                                 |
 |                | `size`                  | Visual size of the gland                                                                                              |
 | `fat`          | `storage`               | Increases `max_energy` capacity                                                                                       |

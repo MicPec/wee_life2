@@ -36,6 +36,9 @@ class World:
 
         self.organisms: list[Organism] = []
         self.food: list[Food] = []
+        # Emitters from the previous tick, rebuilt once per update; scent reads
+        # them for long-range mate attraction (one-tick lag, like the grid).
+        self.pheromone_emitters: list[Organism] = []
         self.deaths: dict[str, int] = {}
         self.births: int = 0
         self.births_by_species: dict[str, int] = {}
@@ -271,6 +274,7 @@ class World:
         """Remove all organisms and food, reset counters, keep the map."""
         self.organisms.clear()
         self.food.clear()
+        self.pheromone_emitters.clear()
         self.spatial_grid.clear()
         self.births = 0
         self.births_by_species.clear()
@@ -359,7 +363,11 @@ class World:
             if a.can_mate() and b.can_mate():
                 a_asexual = sum(1 for g in a.dna.genes if g.kind == "asexual")
                 b_asexual = sum(1 for g in b.dna.genes if g.kind == "asexual")
-                effective_mating_rate = config.MATING_RATE * (0.75 ** (a_asexual + b_asexual))
+                effective_mating_rate = (
+                    config.MATING_RATE
+                    * (0.75 ** (a_asexual + b_asexual))
+                    * (1.0 + config.PHEROMONE_MATING_BONUS * max(a.pheromone_strength, b.pheromone_strength))
+                )
                 if a.dna.diversity(b.dna) <= config.MATING_DIVERSITY and random.random() < effective_mating_rate:
                     # Block reproduction in dense clusters to avoid avalanche chains
                     cx = (a.position[0] + b.position[0]) / 2
@@ -391,6 +399,7 @@ class World:
         # sensory genes, then we rebuild it for physics and mating.
         self._update_organisms(dt)
         self._remove_dead_organisms()
+        self.pheromone_emitters = [o for o in self.organisms if o.pheromone_strength > 0.0]
         self._rebuild_spatial_grid()
         self._resolve_and_mate_pairs()
         self._update_food(dt)

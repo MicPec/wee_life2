@@ -20,6 +20,7 @@ from wee_life2.genes.eye import EyeGene
 from wee_life2.genes.fear import FearGene
 from wee_life2.genes.geometry import steer_away, steer_toward
 from wee_life2.genes.metabolism import MetabolismGene
+from wee_life2.genes.pheromone import PheromoneGene
 from wee_life2.genes.scent import ScentGene
 
 
@@ -400,6 +401,43 @@ class TestHealTile(unittest.TestCase):
             0.0,
             msg="amphibious organisms used to never benefit from heal tiles",
         )
+
+
+class TestPheromoneLongRange(unittest.TestCase):
+    """Pheromone signals carry beyond the receiver's own scent range."""
+
+    def setUp(self):
+        self.world = World(800, 600, tile_size=20)
+        self.world.clear_map()
+
+    def _mate_ready(self, genes, pos):
+        org = Organism(DNA(genes), pos)
+        org.energy = org.max_energy
+        org.age = org.maturity_min_age + 1
+        self.world.add_organism(org)
+        return org
+
+    def _run_ticks(self, n):
+        for _ in range(n):
+            self.world.update(1.0 / config.TICKS_PER_SECOND)
+
+    def test_pheromone_signal_attracts_beyond_scent_range(self):
+        # terrain_rays=0 isolates the mate drive from terrain steering.
+        receiver = self._mate_ready([ScentGene({"terrain_rays": 0.0})], (300.0, 300.0))
+        receiver.angle = math.pi  # pin the randomised init angle, facing away
+        # 250 away: beyond scent's default 180, inside pheromone's 300.
+        emitter = self._mate_ready([PheromoneGene()], (550.0, 300.0))
+        # Tick 1 publishes the emitter into world.pheromone_emitters; tick 2
+        # lets scent score it.
+        self._run_ticks(3)
+        self.assertLess(heading_error_to(receiver, emitter.position), 0.5)
+
+    def test_no_pheromone_no_long_range_mate_drive(self):
+        receiver = self._mate_ready([ScentGene({"terrain_rays": 0.0})], (300.0, 300.0))
+        receiver.angle = math.pi
+        self._mate_ready([MetabolismGene()], (550.0, 300.0))
+        self._run_ticks(3)
+        self.assertEqual(receiver.combined_drive(), 0.0)
 
 
 if __name__ == "__main__":
