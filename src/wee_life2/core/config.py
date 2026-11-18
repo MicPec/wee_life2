@@ -108,15 +108,15 @@ AMPHIBIOUS_LAND_DRAIN = 0.05  # energy drained per tick while amphibious organis
 WATER_SIGHT_DISCOUNT = 0.25  # eye/scent score multiplier for targets seen/smelled across water (non-amphibious)
 
 # Map generation
-MAP_WATER_FRACTION_MIN = 0.25  # lowest share of the board's interior flooded into lakes by the map generator (R)
-MAP_WATER_FRACTION_MAX = 0.40  # highest share of the interior flooded; each map draws a value in [MIN, MAX]
+MAP_WATER_FRACTION_MIN = 0.3  # lowest share of the board's interior flooded into lakes by the map generator (R)
+MAP_WATER_FRACTION_MAX = 0.45  # highest share of the interior flooded; each map draws a value in [MIN, MAX]
 MAP_WALL_FRACTION = 0.03  # share of the interior turned into thin wall lines, mostly following the coast
 MAP_HAZARD_FRACTION = 0.02  # share of the interior covered by hazards, split into 2-3 islands (one lava on land, the rest radioactive, one of them out on a lake)
 MAP_HEAL_FRACTION = (
     0.008  # share of the interior covered by heal tiles, split into 2-3 oases (on land and out on a lake)
 )
-MAP_NOISE_SCALE = 50.0  # terrain feature size in tiles; larger = bigger lakes and islands
-MAP_NOISE_OCTAVES = 2  # fractal noise layers; more = more ragged coastlines
+MAP_NOISE_SCALE = 80.0  # terrain feature size in tiles; larger = bigger lakes and islands
+MAP_NOISE_OCTAVES = 1.5  # fractal noise layers; more = more ragged coastlines
 
 # Tiles
 TILE_EMPTY = 0  # walkable empty tile

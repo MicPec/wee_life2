@@ -113,15 +113,23 @@ class PerlinNoise:
         bottom = _lerp(_grad(perm[a + 1], xf, yf - 1.0), _grad(perm[b + 1], xf - 1.0, yf - 1.0), u)
         return _lerp(top, bottom, v)
 
-    def fbm(self, x: float, y: float, octaves: int, lacunarity: float = 2.0, gain: float = 0.5) -> float:
-        """Fractal sum of ``octaves`` noise layers, normalised back to ~[-1, 1]."""
+    def fbm(self, x: float, y: float, octaves: float, lacunarity: float = 2.0, gain: float = 0.5) -> float:
+        """Fractal sum of ``octaves`` noise layers, normalised back to ~[-1, 1].
+
+        A fractional part adds one more layer at that share of its amplitude,
+        so 1.5 sits between one and two octaves instead of truncating to one.
+        """
+        octaves = max(1.0, octaves)
+        whole = int(octaves)
+        fraction = octaves - whole
         total = 0.0
         amplitude = 1.0
         frequency = 1.0
         norm = 0.0
-        for _ in range(max(1, octaves)):
-            total += self.noise(x * frequency, y * frequency) * amplitude
-            norm += amplitude
+        for i in range(whole + (fraction > 0.0)):
+            weight = amplitude * (fraction if i == whole else 1.0)
+            total += self.noise(x * frequency, y * frequency) * weight
+            norm += weight
             amplitude *= gain
             frequency *= lacunarity
         return total / norm
@@ -248,7 +256,7 @@ def _height_field(cols: int, rows: int, rng: random.Random) -> list[list[float]]
     elevation = PerlinNoise(rng)
     warp = PerlinNoise(rng)
     scale = max(1.0, config.MAP_NOISE_SCALE)
-    octaves = max(1, int(config.MAP_NOISE_OCTAVES))
+    octaves = max(1.0, float(config.MAP_NOISE_OCTAVES))
     # Random fractional offsets: Perlin noise is 0 on every lattice point, and
     # an unshifted grid would sample the same lattice for every seed.
     ox, oy = rng.uniform(0.0, 200.0), rng.uniform(0.0, 200.0)

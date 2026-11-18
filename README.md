@@ -96,7 +96,7 @@ Editor controls:
 - `3` — lava
 - `4` — water
 - `5` — heal
-- `R` — generate a new map: noise-based lakes and islands (25–40% water), thin walls mostly running right along the coastline, 2–3 hazard islands and 2–3 heal oases, on land and out on the lakes (see [Map generation](#map-generation))
+- `R` — generate a new map: noise-based lakes and islands (30–45% water), thin walls mostly running right along the coastline, 2–3 hazard islands and 2–3 heal oases, on land and out on the lakes (see [Map generation](#map-generation))
 - `C` — clear map (the whole board becomes empty; there is no wall frame — the board's edge itself stops organisms)
 - `S` — save
 - `E` — exit editor
@@ -370,13 +370,13 @@ Pressing `R` in the map editor (or in in-simulation edit mode), or starting with
 
 | Constant                 | Default | Description                                                                                                     |
 | ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------- |
-| `MAP_WATER_FRACTION_MIN` | `0.25`  | Lowest share of the board's interior flooded into lakes when a map is generated (`R`, or no saved map)          |
-| `MAP_WATER_FRACTION_MAX` | `0.40`  | Highest share of the interior flooded; each generated map draws its water share uniformly from `[MIN, MAX]`     |
+| `MAP_WATER_FRACTION_MIN` | `0.3`   | Lowest share of the board's interior flooded into lakes when a map is generated (`R`, or no saved map)          |
+| `MAP_WATER_FRACTION_MAX` | `0.45`  | Highest share of the interior flooded; each generated map draws its water share uniformly from `[MIN, MAX]`     |
 | `MAP_WALL_FRACTION`      | `0.03`  | Share of the interior turned into thin wall lines (land only); about 70% follow the coastline                   |
 | `MAP_HAZARD_FRACTION`    | `0.02`  | Hazard share, as 2–3 compact islands: one lava on land, the rest radioactive (one out on a lake)                |
 | `MAP_HEAL_FRACTION`      | `0.008` | Heal share, as 2–3 oases away from hazards, on land and out on a lake                                           |
-| `MAP_NOISE_SCALE`        | `50.0`  | Terrain feature size in tiles; larger values give bigger lakes and islands                                      |
-| `MAP_NOISE_OCTAVES`      | `2`     | Fractal noise layers; more layers give more ragged coastlines                                                   |
+| `MAP_NOISE_SCALE`        | `80.0`  | Terrain feature size in tiles; larger values give bigger lakes and islands                                      |
+| `MAP_NOISE_OCTAVES`      | `1.5`   | Fractal noise layers; more layers give more ragged coastlines (a fraction adds the last layer at that weight)   |
 
 ### Tiles
 

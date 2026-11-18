@@ -83,6 +83,15 @@ class TestPerlinNoise(unittest.TestCase):
             x, y = rng.uniform(-50, 50), rng.uniform(-50, 50)
             self.assertLessEqual(abs(noise.fbm(x, y, 4)), 1.0)
 
+    def test_fractional_octaves_blend_the_last_layer(self):
+        noise = PerlinNoise(random.Random(1))
+        x, y = 4.3, 2.7
+        # 1.5 octaves: the second layer (amplitude 0.5) enters at half weight, 0.25.
+        expected = (noise.noise(x, y) + 0.25 * noise.noise(2 * x, 2 * y)) / 1.25
+        self.assertAlmostEqual(noise.fbm(x, y, 1.5), expected)
+        self.assertEqual(noise.fbm(x, y, 1.0), noise.noise(x, y))
+        self.assertAlmostEqual(noise.fbm(x, y, 2.0), noise.fbm(x, y, 2))
+
     def test_noise_is_smooth(self):
         noise = PerlinNoise(random.Random(1))
         self.assertLess(abs(noise.noise(4.30, 2.70) - noise.noise(4.31, 2.70)), 0.05)
