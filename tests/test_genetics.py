@@ -498,6 +498,21 @@ class TestEnergyBudget(unittest.TestCase):
         for _ in range(20):
             organism.update(self.world, 1.0 / 60.0)
 
+    def test_spike_spares_own_species(self):
+        """Spikes hurt other species on contact but never kin, so they don't
+        punish mating partners or herd mates."""
+        carrier = Organism(DNA([GENE_REGISTRY["spike"]()]), (200.0, 150.0))
+        kin = Organism(DNA([GENE_REGISTRY["leg"]()]), (205.0, 150.0))
+        stranger = Organism(DNA([GENE_REGISTRY["leg"]()]), (195.0, 150.0))
+        kin.name = carrier.name
+        stranger.name = carrier.name + "-other"
+        for o in (carrier, kin, stranger):
+            o.energy = 50.0
+            self.world.add_organism(o)
+        carrier.dna.genes[0].apply(carrier, self.world, 1.0 / 60.0)
+        self.assertEqual(kin.energy, 50.0)
+        self.assertLess(stranger.energy, 50.0)
+
     def test_upkeep_never_goes_negative(self):
         """An oversized MASS_UPKEEP_FACTOR must not make idle upkeep an energy source."""
         original = config.MASS_UPKEEP_FACTOR

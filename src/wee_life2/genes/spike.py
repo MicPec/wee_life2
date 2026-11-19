@@ -59,7 +59,7 @@ class SpikeGene(Gene):
         max_reach = organism.radius + self.params["size"] + config.MAX_ORGANISM_RADIUS
         ox, oy = organism.position
         for other in organism.nearby_organisms(world, max_reach):
-            if other is organism or other.is_dead:
+            if other is organism or other.is_dead or other.name == organism.name:
                 continue
             # Avoid attacking organisms that are much bigger / stronger
             if other.energy > organism.energy * 1.3:
