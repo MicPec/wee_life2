@@ -21,7 +21,7 @@ class ColorGene(Gene):
         "saturation": 0.85,
         "value": 0.9,
         "glow": 0.3,
-        "size": 10.0,
+        "size": 7.5,
     }
     param_bounds = {"glow": (0.0, 1.0), "size": (MIN_BODY_SIZE, 10.0)}
 

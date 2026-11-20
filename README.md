@@ -8,6 +8,7 @@ A Python/Pygame sandbox where units live on a board, are controlled by a genetic
   - [Table of contents](#table-of-contents)
   - [Run](#run)
   - [Statistics output](#statistics-output)
+    - [Batch runs](#batch-runs)
   - [Screenshot](#screenshot)
   - [Map editor](#map-editor)
   - [Sample maps](#sample-maps)
@@ -72,6 +73,16 @@ Each run writes a timestamped directory under `data/runs/` (configurable via `co
 - `meta.json` and `map.json` — run metadata and the tile map.
 
 `generation` lets you compare how fast different species are producing new biological generations, independent of the wall-clock tick count.
+
+### Batch runs
+
+`scripts/batch_runs.py` runs many seeded headless simulations in parallel and tracks which genes survive:
+
+```bash
+uv run python scripts/batch_runs.py data/batches/my_batch --seeds 30 --ticks 50000 --jobs 15
+```
+
+The output directory gets `genes_seed_XX.jsonl` (population, species and the share of organisms carrying each gene, every 1000 ticks), `final.csv` (last row per seed), `summary.json` (cross-seed mean/stdev/min/max at the final tick), `meta.json` (commit and full config) and `runs/seed_XX/` with the normal per-run statistics of every seed. A seed that crashes is listed under `failed_seeds` in `summary.json` instead of aborting the batch. 30 seeds x 50 000 ticks take about 50 minutes on 16 cores.
 
 ## Screenshot
 
@@ -307,6 +318,9 @@ modify `core/config.py`.
 | `ENERGY_TO_MATE`        | `35.0`  | Minimum energy an organism needs before it is eligible to mate                                              |
 | `HEAL_ENERGY`           | `0.3`   | Energy restored per tick while standing on a heal tile                                                      |
 | `REGENERATION_AGE_COST` | `10.0`  | Ticks of extra ageing per unit of energy `regeneration` creates from nothing (the fat-reserve path is free) |
+| `REFERENCE_BODY_MASS`   | `200.0` | Body mass (sum of squared part sizes) treated as mass ratio 1.0; `color` body discs count only as a flat 25 |
+| `MASS_UPKEEP_FACTOR`    | `1.0`   | How strongly mass above/below the reference raises/lowers the `ENERGY_COST_STAY` upkeep                     |
+| `GENE_UPKEEP_COST`      | `0.005` | Extra upkeep per tick for every gene in the genome, except `color` (colour is free)                         |
 
 ### Lifespan / reproduction
 
@@ -324,7 +338,8 @@ modify `core/config.py`.
 | `ASEXUAL_COOLDOWN_RATE`         | `2.0`   | Global scale on the `asexual` gene's reproduction cooldown; lower means more frequent solo reproduction                                                                                                                                               |
 | `MATING_DIVERSITY`              | `0.45`  | Maximum `DNA.diversity()` allowed between two parents for mating to be considered (too different = incompatible). Random genomes average ~0.7 diversity against each other, so lower thresholds starve sexual reproduction and let `asexual` dominate |
 | `MATING_DENSITY_RADIUS`         | `80`    | Radius (pixels) used to count nearby organisms before allowing a mating event                                                                                                                                                                         |
-| `MATING_DENSITY_LIMIT`          | `3`     | Mating is blocked if more than this many other organisms are within `MATING_DENSITY_RADIUS` (prevents population explosions in clusters)                                                                                                              |
+| `MATING_DENSITY_LIMIT`          | `4`     | Mating is blocked if more than this many other organisms are within `MATING_DENSITY_RADIUS` (prevents population explosions in clusters); also applies to `asexual` cloning                                                                         |
+| `HERD_MATING_DENSITY_LIMIT`     | `5`     | The same limit for sexual mating when either partner carries `herd` (herd animals tolerate a denser crowd)                                                                                                                                            |
 | `POPULATION_CAP`                | `0.1`   | Fraction of `cols × rows` tiles that sets `world.max_organisms`                                                                                                                                                                                       |
 | `SPECIES_CAP_FRACTION`          | `1.0`   | No single species can exceed this fraction of `max_organisms`                                                                                                                                                                                         |
 | `MATING_DEATH_CHANCE`           | `0.05`  | Probability one parent dies instead of reproducing when mating is attempted                                                                                                                                                                           |
@@ -368,7 +383,7 @@ map.
 
 ### Map generation
 
-Pressing `R` in the map editor (or in in-simulation edit mode), or starting without a saved map, grows a board from a domain-warped fractal Perlin-noise height field (`core/map_generator.py`), with no wall frame, so lakes and land run right to the edge: the lowest ground floods into lakes (hills left standing inside them become islands), the coast is smoothed and specks are dissolved, and the water share is corrected along the shoreline to land exactly on budget. About 70% of the wall budget then follows the coastline: the last tile of land before the water is walked along the shore and cut into walls of 14–26 tiles with a doorway between them, so the walls sit right on the water's edge with ways through to the lakes. The rest goes on free-standing one-tile-thick lines (contours, straight lines with a bend, parallel pairs forming a corridor). Any pocket the walls close off gets a three-tile doorway carved out. Finally the hazard budget becomes 2–3 compact islands (one lava, on land against a wall's landward side; the rest radioactive) and the heal budget 2–3 oases away from the hazards. At least one radioactive island and one heal oasis sit out in a lake (with open water around them; extra lowland is flooded up front so the water share still lands on budget), and land hazards keep 3 tiles off the shore so they never plug a doorway in a coastal wall. Such a tile out on a lake is not water: an `amphibious` organism on it pays the land drain, a non-amphibious one does not drown. Every tile type is placed by share of the interior, so each map lands inside these budgets whatever the seed.
+Pressing `R` in the map editor (or in in-simulation edit mode), or starting without a saved map, grows a board from a domain-warped fractal Perlin-noise height field (`core/map_generator.py`), with no wall frame, so lakes and land run right to the edge: the lowest ground floods into lakes (hills left standing inside them become islands), the coast is smoothed and specks are dissolved, and the water share is corrected along the shoreline to land exactly on budget. About 70% of the wall budget then follows the coastline: the last tile of land before the water is walked along the shore and cut into walls of 14–26 tiles with a doorway between them, so the walls sit right on the water's edge with ways through to the lakes. The rest goes on free-standing one-tile-thick lines (contours, straight lines with a bend, parallel pairs forming a corridor). Any pocket the walls close off gets a doorway carved out. Doorways (between coastal walls, in long lines and out of pockets) are six tiles wide (`WALL_DOOR_WIDTH`), so big organisms fit through. Finally the hazard budget becomes 2–3 compact islands (one lava, on land against a wall's landward side; the rest radioactive) and the heal budget 2–3 oases away from the hazards. At least one radioactive island and one heal oasis sit out in a lake (with open water around them; extra lowland is flooded up front so the water share still lands on budget), and land hazards keep 3 tiles off the shore so they never plug a doorway in a coastal wall. Such a tile out on a lake is not water: an `amphibious` organism on it pays the land drain, a non-amphibious one does not drown. Every tile type is placed by share of the interior, so each map lands inside these budgets whatever the seed.
 
 | Constant                 | Default | Description                                                                                                     |
 | ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------- |
@@ -476,8 +491,8 @@ not accidentally become attractors.
 | `color`        | `hue`                   | Base body hue (0-1); randomised at birth if not inherited                                                             |
 |                | `saturation`            | Colour saturation; randomised at birth if not inherited                                                               |
 |                | `value`                 | Colour brightness/value; randomised at birth if not inherited                                                         |
-|                | `glow`                  | Bioluminescence intensity (`organism.bioluminescence`)                                                                |
-|                | `size`                  | Radius of the main body disc                                                                                          |
+|                | `glow`                  | Bioluminescence intensity (`organism.bioluminescence`), 0-1, default 0.3; intimidates `fear` carriers of other species |
+|                | `size`                  | Radius of the main body disc, 5-10, default 7.5 (the disc adds no upkeep, so it is capped)                            |
 | `metabolism`   | `efficiency`            | 0-1, higher means slower passive energy drain                                                                         |
 |                | `lifespan_factor`       | Multiplier applied to `base_lifespan`                                                                                 |
 |                | `radiation_resistance`  | Reduces damage from radioactive tiles                                                                                 |
@@ -557,15 +572,15 @@ not accidentally become attractors.
 | `spike`        | Passive contact damage to enemies                                                                                | Spikes around body    |
 | `armor`        | Reduces incoming damage                                                                                          | Armor plates          |
 | `toxin_gland`  | Produces poisonous remains on death                                                                              | Gland sac             |
-| `color`        | Base body colour and bioluminescence                                                                             | Main body disc        |
+| `color`        | Base body colour and bioluminescence; free (no upkeep, no extra mass), its glow intimidates other species        | Main body disc        |
 | `metabolism`   | Energy efficiency, lifespan, radiation resistance; required for `eye`/`scent` to seek food                       | —                     |
 | `scent`        | Smells food, mates, danger and terrain (including heal tiles) in all directions                                  | Antennae              |
 | `pheromone`    | Emits a mating signal other organisms can sense                                                                  | Scent gland           |
 | `fat`          | Increases energy capacity and buffers starvation                                                                 | Fat bulges            |
 | `regeneration` | Heals when damaged                                                                                               | Regeneration nodules  |
-| `fear`         | Detects threats and triggers escape                                                                              | Ear / fin             |
+| `fear`         | Detects threats (incl. glowing strangers) and triggers escape; alarm spreads to kin                              | Ear / fin             |
 | `touch`        | Feels nearby walls, hazards and (if not amphibious) water, steers away                                           | Whiskers              |
-| `herd`         | Attracts the organism toward same-species kin                                                                    | Small banner marker   |
+| `herd`         | Attracts the organism toward same-species kin; tolerates a denser crowd when mating                              | Small banner marker   |
 | `amphibious`   | Full-speed, safe movement in water; drains energy on land and pulls the carrier back to water                    | Fin-like frill        |
 | `venom`        | Injects poison into bitten prey, causing damage over time                                                        | Venom gland           |
 | `asexual`      | Clones itself periodically without needing a mate                                                                | Arrow-shaped node     |
@@ -580,6 +595,11 @@ combines all drives into a single heading.  This lets multiple genes cooperate
 or compete: `eye` and `scent` search for food, `fear` pushes away from
 predators, `jaw` steers toward vulnerable prey, `touch` avoids walls and
 `memory` recalls long-term terrain hints.
+
+`fear` treats a glowing organism of another species as more dangerous: its
+threat level rises by `glow * COLOR_INTIMIDATION` (`0.5` by default, so the
+default glow of 0.3 alone does not scare off an equally strong stranger, a
+glow of 0.4 or more does).  Glow of the organism's own kin is ignored.
 
 `eye` and `scent` terrain sensing is aggregated into a single vector per gene,
 so multiple nearby walls/hazards do not fight each other and cause spinning.
