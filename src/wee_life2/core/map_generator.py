@@ -64,7 +64,7 @@ CONTOUR_VERTEX_STEP = 3  # contour points kept per polyline vertex (smooths the 
 WALL_CORRIDOR_SHARE = 0.35
 WALL_CORRIDOR_WIDTH = (3, 4)  # open tiles between the two walls of a corridor
 WALL_DOOR_CHANCE = 0.5  # chance a long stroke gets a doorway cut into it
-WALL_DOOR_WIDTH = 3  # path cells removed per doorway / widened pocket exit
+WALL_DOOR_WIDTH = 6  # path cells removed per doorway / widened pocket exit
 WALL_MAX_WATER = 0.4  # strokes running mostly through a lake are rejected
 # A new stroke may touch existing walls at a couple of cells (a T-junction or
 # crossing) but not run alongside one, which would thicken it into a blob.
@@ -819,12 +819,21 @@ def _connect_pockets(grid: Grid, interior: list[Cell]) -> None:
                 carved.append(cell)
             cell = parent[cell]
         # A one-tile slit through a thin wall is narrower than a big
-        # organism, so also open the wall cells along the line on either side.
-        for col, row in carved:
-            for dc, dr in _NEIGHBOURS_4:
-                c, r = col + dc, row + dr
-                if 0 < c < cols - 1 and 0 < r < rows - 1 and grid[r][c] == WALL:
-                    grid[r][c] = EMPTY
+        # organism, so also open the wall cells along the line on either
+        # side: across a one-tile wall the doorway ends up WALL_DOOR_WIDTH
+        # wide; across a thicker wall each carved cell is widened
+        # separately, so the opening is larger.
+        for start in carved:
+            frontier = deque([start])
+            opened = 1
+            while frontier and opened < WALL_DOOR_WIDTH:
+                col, row = frontier.popleft()
+                for dc, dr in _NEIGHBOURS_4:
+                    c, r = col + dc, row + dr
+                    if opened < WALL_DOOR_WIDTH and 0 < c < cols - 1 and 0 < r < rows - 1 and grid[r][c] == WALL:
+                        grid[r][c] = EMPTY
+                        opened += 1
+                        frontier.append((c, r))
 
 
 def _plan_islands(kinds: list[int], total: int, water_fraction: float, rng: random.Random) -> list[tuple[int, int, int]]:

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 from wee_life2.core import config
 from wee_life2.core.dna import DNA

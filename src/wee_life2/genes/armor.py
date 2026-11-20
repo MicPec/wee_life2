@@ -17,9 +17,9 @@ class ArmorGene(Gene):
 
     kind = "armor"
     default_params = {
-        "thickness": 2.0,
+        "thickness": 2.5,
         "coverage": 0.3,
-        "size": 9.0,
+        "size": 6.0,
     }
 
     def __init__(self, params=None) -> None:

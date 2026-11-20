@@ -123,6 +123,51 @@ class TestFearFlees(unittest.TestCase):
         self.assertTrue(prey.drives, "secondhand alarm should produce a drive")
         self.assertGreater(heading_error_to(prey, kin.position), math.pi / 2.0)
 
+    def _make_glow_pair(self, glow: float, kin: bool = False) -> tuple[Organism, FearGene, Organism]:
+        gene = FearGene()
+        dna = DNA([gene])
+        prey = self.world.spawn_organism(dna, (200.0, 150.0))
+        prey.angle = 0.0
+        other = self.world.spawn_organism(dna.clone() if kin else DNA([]), (250.0, 150.0))
+        # Equal energy, no weapons: the base threat stays below the 1.2
+        # cutoff, so only glow (and the kin exemption) decides the outcome.
+        other.energy = prey.energy
+        other.aggression = 0.0
+        other.bioluminescence = glow
+        self.world._rebuild_spatial_grid()
+        prey.drives.clear()
+        prey._nearby_organisms = None
+        return prey, gene, other
+
+    def test_fear_flees_glowing_stranger(self):
+        """Glow intimidates: a harmless glowing other-species organism reads
+        as a threat to a fear carrier."""
+        prey, gene, other = self._make_glow_pair(1.0)
+        self.assertNotEqual(prey.name, other.name)
+        gene.apply(prey, self.world, 1.0 / config.FPS)
+        self.assertTrue(prey.drives, "a glowing stranger should trigger fear")
+        self.assertGreater(heading_error_to(prey, other.position), math.pi / 2.0)
+
+    def test_fear_ignores_default_glow_stranger(self):
+        """Default glow 0.3 with COLOR_INTIMIDATION 0.5 scores 1.15, below
+        the 1.2 cutoff, so a default-glow stranger does not trigger fear."""
+        prey, gene, _ = self._make_glow_pair(0.3)
+        gene.apply(prey, self.world, 1.0 / config.FPS)
+        self.assertFalse(prey.drives, "a default-glow stranger should not trigger fear")
+
+    def test_fear_ignores_dull_stranger(self):
+        """The same stranger without glow is below the threat cutoff."""
+        prey, gene, _ = self._make_glow_pair(0.0)
+        gene.apply(prey, self.world, 1.0 / config.FPS)
+        self.assertFalse(prey.drives, "a harmless stranger should not trigger fear")
+
+    def test_fear_ignores_glowing_kin(self):
+        """Own-species glow never intimidates, however bright."""
+        prey, gene, kin = self._make_glow_pair(1.0, kin=True)
+        self.assertEqual(prey.name, kin.name)
+        gene.apply(prey, self.world, 1.0 / config.FPS)
+        self.assertFalse(prey.drives, "glowing kin should not trigger fear")
+
 
 class TestSenseThreatSelection(unittest.TestCase):
     """eye/scent must flee the *nearest* threat, even with food in view."""

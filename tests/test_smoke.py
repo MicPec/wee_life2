@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 from wee_life2.core import config
 from wee_life2.core.map_storage import MapStorage

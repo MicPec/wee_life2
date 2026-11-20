@@ -10,6 +10,9 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import MagicMock, patch
 
+# `discover tests` skips tests/__init__.py, and importing main.py on Wayland
+# would pick the real wayland driver, so later tests would open real windows.
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 main_module = importlib.import_module("wee_life2.main")
 from wee_life2.core import config
 

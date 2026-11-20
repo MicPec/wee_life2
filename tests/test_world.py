@@ -45,6 +45,32 @@ class TestWorld(unittest.TestCase):
         density = self.world.local_density((50.0, 50.0), 30)
         self.assertGreaterEqual(density, 2)
 
+    def _crowded_pair(self, genes):
+        """Two eligible mates with five bystanders: denser than the normal
+        limit (4), within the herd limit (5)."""
+        a, b = (self.world.spawn_organism(DNA([g() for g in genes]), (100.0 + dx, 90.0)) for dx in (0.0, 5.0))
+        for i in range(5):
+            self.world.spawn_organism(DNA([]), (100.0 + 10 * i, 120.0))
+        self.world._rebuild_spatial_grid()
+        for o in (a, b):
+            o.age = o.maturity_min_age + 1.0
+            o.energy = o.energy_to_mate + 50.0
+        return a, b
+
+    def test_crowd_blocks_mating(self):
+        from wee_life2.genes import GENE_REGISTRY
+
+        a, b = self._crowded_pair([GENE_REGISTRY["leg"]])
+        with patch("wee_life2.core.world.random.random", return_value=0.99), patch.object(config, "MATING_RATE", 1.0):
+            self.assertIsNone(self.world._try_mating(a, b))
+
+    def test_herd_tolerates_denser_crowd_for_mating(self):
+        from wee_life2.genes import GENE_REGISTRY
+
+        a, b = self._crowded_pair([GENE_REGISTRY["leg"], GENE_REGISTRY["herd"]])
+        with patch("wee_life2.core.world.random.random", return_value=0.99), patch.object(config, "MATING_RATE", 1.0):
+            self.assertIsNotNone(self.world._try_mating(a, b))
+
     def test_organisms_near(self):
         dna = DNA.random()
         a = self.world.spawn_organism(dna, (50.0, 50.0))

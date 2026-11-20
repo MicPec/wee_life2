@@ -17,6 +17,9 @@ if TYPE_CHECKING:
     from ..core.world import World
 
 
+MIN_BODY_SIZE = 5.0
+
+
 @dataclass
 class BodyPartBlueprint:
     """Description of one body segment produced by a gene.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
+from ..core import config
 from .base import BodyPartBlueprint, Gene
 from .geometry import angle_diff
 
@@ -56,6 +57,9 @@ class FearGene(Gene):
                 continue
             # A threat is bigger, more aggressive or currently biting
             threat_level = other.energy / max(1.0, organism.energy) + other.aggression * 2.0
+            # A glowing stranger is intimidating; own kin's glow is ignored.
+            if other.name != organism.name:
+                threat_level += other.bioluminescence * config.COLOR_INTIMIDATION
             if threat_level < 1.2:
                 continue
             dx = other.position[0] - pos[0]

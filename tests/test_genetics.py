@@ -246,6 +246,21 @@ class TestEnergyBudget(unittest.TestCase):
         self.assertGreater(Organism(heavy).upkeep, Organism(light).upkeep)
         self.assertGreater(self._drain(heavy), self._drain(light))
 
+    def test_color_gene_is_free(self):
+        """Color adds neither per-gene upkeep nor body mass."""
+        plain = Organism(DNA([GENE_REGISTRY["leg"]()]))
+        colored = Organism(DNA([GENE_REGISTRY["leg"](), GENE_REGISTRY["color"]()]))
+        self.assertEqual(colored.upkeep, plain.upkeep)
+        self.assertEqual(colored.mass_ratio, plain.mass_ratio)
+
+    def test_color_size_mutation_stays_bounded(self):
+        """The free colour disc cannot grow (or shrink) past its bounds."""
+        gene = GENE_REGISTRY["color"]({"size": 10.0})
+        for _ in range(200):
+            gene.mutate(1.0, 5.0)
+            self.assertGreaterEqual(gene.params["size"], 5.0)
+            self.assertLessEqual(gene.params["size"], 10.0)
+
     def test_fat_gene_creates_no_energy(self):
         """Fat may only return energy it previously stored."""
         organism = Organism(DNA([FatGene({"storage": 0.8, "reserve_factor": 0.3})]), (200.0, 150.0))

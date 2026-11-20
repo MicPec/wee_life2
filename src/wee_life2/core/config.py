@@ -69,7 +69,8 @@ MATING_RATE = 0.3  # probability that a collision between two eligible organisms
 PHEROMONE_MATING_BONUS = 1.0  # mating-chance multiplier gained per unit of the stronger partner's pheromone signal (1.0 -> up to 2x)
 MATING_DIVERSITY = 0.45  # maximum genome diversity allowed for two organisms to mate
 MATING_DENSITY_RADIUS = 80  # radius for checking local population density before mating
-MATING_DENSITY_LIMIT = 3  # maximum number of nearby organisms allowed for mating
+MATING_DENSITY_LIMIT = 4  # maximum number of nearby organisms allowed for mating
+HERD_MATING_DENSITY_LIMIT = 5  # the same limit when either partner carries a herd gene (sexual mating only)
 MATING_DEATH_CHANCE = 0.05  # chance that mating fails and one parent dies instead
 ASEXUAL_COOLDOWN_RATE = 2.0  # global scale on the asexual gene's reproduction cooldown; lower = more frequent
 
@@ -88,6 +89,7 @@ GENE_SPAWN_WEIGHTS = {  # per-gene overrides; higher = more common
     "touch": 1.7,  # needed to avoid hazards
     "metabolism": 1.8,  # needed for energy and longevity
 }
+COLOR_INTIMIDATION = 0.5  # threat added per unit of glow when a fear carrier of another species looks at a glowing organism
 
 # Hazards
 RADIATION_DAMAGE = 3.0  # energy damage per tick on radioactive tiles

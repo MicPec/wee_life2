@@ -372,10 +372,10 @@ class World:
                     # Block reproduction in dense clusters to avoid avalanche chains
                     cx = (a.position[0] + b.position[0]) / 2
                     cy = (a.position[1] + b.position[1]) / 2
-                    if (
-                        self.local_density((cx, cy), config.MATING_DENSITY_RADIUS, exclude=(a, b))
-                        > config.MATING_DENSITY_LIMIT
-                    ):
+                    # Herd animals live in groups, so they tolerate a denser crowd.
+                    herd = a._has_herd or b._has_herd
+                    limit = config.HERD_MATING_DENSITY_LIMIT if herd else config.MATING_DENSITY_LIMIT
+                    if self.local_density((cx, cy), config.MATING_DENSITY_RADIUS, exclude=(a, b)) > limit:
                         return None
                     # Small chance one parent dies instead of reproducing
                     if random.random() < config.MATING_DEATH_CHANCE:

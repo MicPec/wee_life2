@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
-from .base import BodyPartBlueprint, Gene, hsv_to_rgb
+from .base import MIN_BODY_SIZE, BodyPartBlueprint, Gene, hsv_to_rgb
 
 if TYPE_CHECKING:
     from ..core.organism import Organism
@@ -20,9 +20,10 @@ class ColorGene(Gene):
         "hue": 0.5,
         "saturation": 0.85,
         "value": 0.9,
-        "glow": 0.1,
+        "glow": 0.3,
         "size": 10.0,
     }
+    param_bounds = {"glow": (0.0, 1.0), "size": (MIN_BODY_SIZE, 10.0)}
 
     def __init__(self, params=None):
         params = dict(params) if params else {}
@@ -53,6 +54,8 @@ class ColorGene(Gene):
         ]
 
     def apply(self, organism: Organism, world: World, dt: float) -> None:
-        # Color is visual only, but glow could attract mates / predators later.
+        # Color is free (no upkeep, no body mass) but not purely cosmetic:
+        # glow feeds organism.bioluminescence, which fear carriers of other
+        # species read as intimidation (config.COLOR_INTIMIDATION).
         # Additive so multiple color genes stack instead of overwriting.
         organism.bioluminescence += self.params["glow"]

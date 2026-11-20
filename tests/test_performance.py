@@ -1,7 +1,10 @@
 """Performance smoke tests to detect regressions."""
 
+import os
 import time
 import unittest
+
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 import pygame
 

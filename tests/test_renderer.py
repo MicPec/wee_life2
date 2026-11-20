@@ -7,7 +7,7 @@ a typo there is invisible on screen rather than raising, so it needs asserting.
 import os
 import unittest
 
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 import pygame
 

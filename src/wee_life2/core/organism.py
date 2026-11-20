@@ -139,7 +139,7 @@ class Organism:
 
     def _build_body(self) -> None:
         """Assemble body parts from the genome, using color genes as base colour."""
-        from ..genes.base import random_color
+        from ..genes.base import MIN_BODY_SIZE, random_color
 
         base_color = random_color()
         color_gene = next((g for g in self.dna.genes if g.kind == "color"), None)
@@ -161,12 +161,12 @@ class Organism:
             # Fallback body disc if no color gene produced one.
             from ..genes.base import BodyPartBlueprint
 
-            self.body_parts.append(BodyPart(BodyPartBlueprint(kind="body", size=5.0, color=base_color), self))
+            self.body_parts.append(BodyPart(BodyPartBlueprint(kind="body", size=MIN_BODY_SIZE, color=base_color), self))
 
         # Make sure the body is always visible, even after heavy scaling.
         for bp in self.body_parts:
             if bp.blueprint.kind == "body":
-                bp.blueprint.size = max(bp.blueprint.size, 5.0)
+                bp.blueprint.size = max(bp.blueprint.size, MIN_BODY_SIZE)
 
         natural_radius = max(
             math.hypot(bp.blueprint.offset[0], bp.blueprint.offset[1]) + bp.blueprint.size for bp in self.body_parts
@@ -179,21 +179,26 @@ class Organism:
         self._jaw_count = sum(1 for g in self.dna.genes if g.kind == "jaw")
         self._spike_count = sum(1 for g in self.dna.genes if g.kind == "spike")
         self._has_amphibious = any(g.kind == "amphibious" for g in self.dna.genes)
+        self._has_herd = any(g.kind == "herd" for g in self.dna.genes)
         self._has_metabolism = any(g.kind == "metabolism" for g in self.dna.genes)
 
         # Bigger bodies and longer genomes are more expensive to maintain;
-        # without this, extra genes and bulk were a free bonus.  Mass is
-        # measured from the unscaled body, so shrinking an oversized organism
+        # without this, extra genes and bulk were a free bonus.  Color genes
+        # are exempt on both counts: their body discs (and the fallback disc)
+        # add no mass beyond a flat MIN_BODY_SIZE**2 for the minimal body
+        # every organism has (the colour size is capped at 10, so the free
+        # disc cannot grow), and color genes skip the per-gene upkeep term.
+        # Mass is measured from the unscaled body, so shrinking an oversized organism
         # to MAX_ORGANISM_RADIUS below limits its geometry but not its upkeep:
         # bulk beyond the cap still costs.  The mass term is floored at zero
         # so an oversized MASS_UPKEEP_FACTOR config override can't turn small
         # bodies into free energy generators.
         self.mass_ratio = (
-            sum(bp.blueprint.size * bp.blueprint.size for bp in self.body_parts) / config.REFERENCE_BODY_MASS
-        )
+            sum(bp.blueprint.size**2 for bp in self.body_parts if bp.blueprint.kind != "body") + MIN_BODY_SIZE**2
+        ) / config.REFERENCE_BODY_MASS
         self.upkeep = config.ENERGY_COST_STAY * max(
             0.0, 1.0 + config.MASS_UPKEEP_FACTOR * (self.mass_ratio - 1.0)
-        ) + config.GENE_UPKEEP_COST * len(self.dna.genes)
+        ) + config.GENE_UPKEEP_COST * sum(1 for g in self.dna.genes if g.kind != "color")
 
         # Genome length (and thus body part count/offsets) can grow unbounded
         # over many generations via structural mutation. Uniformly shrink

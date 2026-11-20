@@ -2,4 +2,4 @@
 
 import os
 
-os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+os.environ["SDL_VIDEODRIVER"] = "dummy"

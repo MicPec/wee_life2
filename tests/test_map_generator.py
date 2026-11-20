@@ -11,6 +11,7 @@ from wee_life2.core.map_generator import (
     HEAL_HAZARD_GAP,
     HEAL_ISLANDS,
     SHORE_WALL_DISTANCE,
+    WALL_DOOR_WIDTH,
     PerlinNoise,
     _cell_groups,
     _components,
@@ -313,8 +314,8 @@ class TestConnectPockets(unittest.TestCase):
         _connect_pockets(grid, cells)
         self.assertEqual(len(_components(grid, cells, lambda t: t != config.TILE_WALL)), 1)
         # One wall tile opens a one-thick ring; the exit is widened along the
-        # wall to a three-tile doorway so big organisms fit through.
-        self.assertEqual(sum(row.count(config.TILE_WALL) for row in grid), 36 + 16 - 3)
+        # wall to a WALL_DOOR_WIDTH-tile doorway so big organisms fit through.
+        self.assertEqual(sum(row.count(config.TILE_WALL) for row in grid), 36 + 16 - WALL_DOOR_WIDTH)
 
 
 if __name__ == "__main__":
