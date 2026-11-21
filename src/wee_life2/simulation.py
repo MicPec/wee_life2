@@ -107,7 +107,7 @@ class Simulation:
                 self.world.update(dt)
 
             if not self.renderer.paused:
-                self.stats.step(self.world, dt, screenshot=self._save_board_png)
+                self.stats.step(self.world, dt, screenshot=self._save_board_png, frame=self._save_frame_png)
 
             self.renderer.render(self.world)
         self.stats.close()
@@ -118,7 +118,7 @@ class Simulation:
         if dt is None:
             dt = 1.0 / config.FPS if config.FPS > 0 else 1.0 / 60.0
         self.world.update(dt)
-        self.stats.step(self.world, dt, screenshot=self._save_board_png)
+        self.stats.step(self.world, dt, screenshot=self._save_board_png, frame=self._save_frame_png)
 
     def _save_board_png(self, path: Path) -> None:
         """Render the current frame, then save exactly what is on screen.
@@ -127,6 +127,14 @@ class Simulation:
         just redraws the frame about to be shown anyway.
         """
         self.renderer.render(self.world)
+        self.renderer.save_screenshot(path)
+
+    def _save_frame_png(self, path: Path) -> None:
+        """Save a timelapse frame: the board only, without the HUD.
+
+        In `run()` the full frame is redrawn right after, before the flip.
+        """
+        self.renderer.render_board(self.world)
         self.renderer.save_screenshot(path)
 
     def load_snapshot(self, data: dict[str, Any]) -> None:

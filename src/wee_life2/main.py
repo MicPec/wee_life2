@@ -25,6 +25,27 @@ def _prefer_native_wayland() -> None:
 _prefer_native_wayland()
 
 
+def _run_headless(sim, ticks: int) -> None:
+    """Step ``sim`` for ``ticks`` ticks without a window, then glue its frames into a video."""
+    start = sim.world.tick
+    reported = 0
+    while sim.world.tick - start < ticks:
+        sim.step()
+        tenths = int(10 * (sim.world.tick - start) / ticks)
+        if tenths > reported:
+            reported = tenths
+            print(f"tick {round(sim.world.tick)} ({min(tenths, 10) * 10}%)", flush=True)
+    sim.stats.close()
+    sim.renderer.close()
+    run_dir = sim.stats.run_dir
+    if run_dir is None or not any((run_dir / "frames").glob("frame_*.png")):
+        print("no frames were saved, no video")
+        return
+    from .timelapse import make_timelapse
+
+    print(make_timelapse(run_dir).resolve().as_uri())
+
+
 def _coerce_config_value(raw: str, current: object) -> object:
     """Cast a raw CLI string to match the type of the existing config constant."""
     from .core.config_json import coerce_value
@@ -121,6 +142,21 @@ def main() -> None:
         help="Load a stats snapshot JSON and continue the simulation from it",
     )
     parser.add_argument(
+        "--timelapse",
+        type=int,
+        nargs="?",
+        const=100,
+        metavar="TICKS",
+        help="Save a board frame every TICKS ticks (default 100) for scripts/make_timelapse.py",
+    )
+    parser.add_argument(
+        "--headless",
+        type=int,
+        metavar="TICKS",
+        help="Run TICKS ticks without a window, saving a frame every 100 ticks (--timelapse changes it), "
+        "then build the run's timelapse.mp4",
+    )
+    parser.add_argument(
         "--no-stats",
         action="store_true",
         help="Disable writing per-run statistics to disk",
@@ -137,6 +173,14 @@ def main() -> None:
 
     if args.set:
         _apply_config_overrides(args.set)
+
+    from .core import config as _config
+
+    if args.timelapse is not None:
+        _config.STATS_FRAME_INTERVAL = args.timelapse
+    elif args.headless is not None and _config.STATS_FRAME_INTERVAL == 0:
+        # Headless runs exist to make a video; keep an interval set by --set or a config file.
+        _config.STATS_FRAME_INTERVAL = 100
 
     # Applied last so an explicit --no-stats always wins over a config file or
     # a --set STATS_ENABLED=True that would otherwise re-enable logging.
@@ -156,6 +200,13 @@ def main() -> None:
 
         ConfigEditorApp(initial_path=args.config_file).run()
         return
+
+    if args.headless is not None:
+        if args.headless <= 0:
+            raise SystemExit("--headless needs a positive number of ticks")
+        if args.edit_map:
+            raise SystemExit("Cannot combine --headless with --edit-map")
+        os.environ["SDL_VIDEODRIVER"] = "dummy"
 
     from .core.map_storage import MapStorage
     from .render.map_editor import MapEditor
@@ -201,4 +252,7 @@ def main() -> None:
                 # loaded when --map-file names it explicitly.
                 random_map=args.map_file is None,
             )
-        sim.run()
+        if args.headless is not None:
+            _run_headless(sim, args.headless)
+        else:
+            sim.run()

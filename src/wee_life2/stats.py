@@ -44,11 +44,14 @@ class RunLogger:
         self.sample_interval = config.STATS_SAMPLE_INTERVAL
         self.census_interval = config.STATS_CENSUS_INTERVAL
         self.snapshot_interval = config.STATS_SNAPSHOT_INTERVAL
+        self.frame_interval = config.STATS_FRAME_INTERVAL
 
         self._tick = 0.0
         self._last_sample_tick = 0.0
         self._last_census_tick = 0.0
         self._last_snapshot_tick = 0.0
+        self._last_frame_tick = 0.0
+        self._frame_count = 0
 
         self._prev_births = 0
         self._prev_total_deaths = 0
@@ -64,6 +67,7 @@ class RunLogger:
         self._organisms_file = None
         self._run_dir: Path | None = None
         self._snapshots_dir: Path | None = None
+        self._frames_dir: Path | None = None
 
         if not self.enabled:
             return
@@ -116,6 +120,9 @@ class RunLogger:
 
         self._snapshots_dir = self._run_dir / "snapshots"
         self._snapshots_dir.mkdir(exist_ok=True)
+        if self.frame_interval > 0:
+            self._frames_dir = self._run_dir / "frames"
+            self._frames_dir.mkdir(exist_ok=True)
 
         # Save a snapshot of the map so the analysis tool can correlate
         # population dynamics with the tile layout.
@@ -145,13 +152,20 @@ class RunLogger:
         suffix = f"{datetime.now().microsecond:04x}"
         return base / f"{timestamp}_{suffix}"
 
-    def step(self, world: World, dt: float, screenshot: Callable[[Path], None] | None = None) -> None:
+    def step(
+        self,
+        world: World,
+        dt: float,
+        screenshot: Callable[[Path], None] | None = None,
+        frame: Callable[[Path], None] | None = None,
+    ) -> None:
         """Advance the internal tick counter from the world and sample when a boundary is crossed.
 
         ``world.tick`` is the canonical generation counter; it is converted from
         wall-clock dt using ``config.FPS`` so one rendered frame at 60 FPS
         increments the counter by one tick. ``screenshot`` is called with the
-        PNG path when a restorable snapshot is written (``None`` skips it).
+        PNG path when a restorable snapshot is written, ``frame`` with the PNG
+        path of each timelapse frame (``None`` skips either).
         """
         if not self.enabled:
             return
@@ -169,6 +183,13 @@ class RunLogger:
         if self.snapshot_interval > 0 and self._tick - self._last_snapshot_tick >= self.snapshot_interval:
             self._snapshot(world, screenshot)
             self._last_snapshot_tick = self._tick
+
+        if self.frame_interval > 0 and self._tick - self._last_frame_tick >= self.frame_interval:
+            if frame is not None:
+                # Numbered by count, not tick: a reset rewinds the tick and would overwrite earlier frames.
+                self._frame_count += 1
+                frame(self._frames_dir / f"frame_{self._frame_count:06d}.png")
+            self._last_frame_tick = self._tick
 
     def _snapshot(self, world: World, screenshot: Callable[[Path], None] | None) -> None:
         """Write a full restorable snapshot: state JSON plus a board PNG."""
@@ -370,6 +391,7 @@ class RunLogger:
         self._last_sample_tick = self._tick
         self._last_census_tick = self._tick
         self._last_snapshot_tick = self._tick
+        self._last_frame_tick = self._tick
 
         self._events_file.write(
             json.dumps(

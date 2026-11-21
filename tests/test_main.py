@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # `discover tests` skips tests/__init__.py, and importing main.py on Wayland
@@ -136,6 +137,37 @@ class TestMain(unittest.TestCase):
             with redirect_stdout(io.StringIO()):
                 main_module.main()
         self.assertFalse(config.STATS_ENABLED)
+
+    def test_timelapse_flag_sets_frame_interval(self):
+        self._save("STATS_FRAME_INTERVAL")
+        cases = (
+            ([], 0),
+            (["--timelapse"], 100),
+            (["--timelapse", "50"], 50),
+            (["--headless", "5"], 100),
+            # --headless must not overwrite an interval chosen via --set.
+            (["--set", "STATS_FRAME_INTERVAL=50", "--headless", "5"], 50),
+        )
+        for extra, expected in cases:
+            config.STATS_FRAME_INTERVAL = 0
+            with patch.object(sys, "argv", ["wee-life2", *extra, "--get", "STATS_FRAME_INTERVAL"]):
+                with redirect_stdout(io.StringIO()):
+                    main_module.main()
+            self.assertEqual(config.STATS_FRAME_INTERVAL, expected)
+
+    def test_headless_runs_ticks_saves_frames_and_builds_video(self):
+        self._save("STATS_FRAME_INTERVAL", "STATS_BASE_DIR", "STATS_ENABLED")
+        config.STATS_ENABLED = True
+        with tempfile.TemporaryDirectory() as tmp:
+            config.STATS_BASE_DIR = tmp
+            argv = ["wee-life2", "--headless", "3", "--timelapse", "1", "--width", "240", "--height", "180"]
+            video = MagicMock(return_value=Path(tmp) / "timelapse.mp4")
+            with patch.object(sys, "argv", argv), patch("wee_life2.timelapse.make_timelapse", video):
+                with redirect_stdout(io.StringIO()) as out:
+                    main_module.main()
+            (run_dir,) = video.call_args.args
+            self.assertEqual(len(list((run_dir / "frames").glob("frame_*.png"))), 3)
+            self.assertIn("file://", out.getvalue())
 
     def test_missing_config_file_raises(self):
         argv = ["wee-life2", "--config-file", "does_not_exist.json"]

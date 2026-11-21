@@ -71,6 +71,7 @@ Each run writes a timestamped directory under `data/runs/` (configurable via `co
 - `census.jsonl` — per-species snapshots every `config.STATS_CENSUS_INTERVAL` ticks, including `count`, `pct`, `avg_energy`, `avg_age`, `min_generation`, and `max_generation`.
 - `organisms.jsonl` — one record per created organism, including `uid`, `name`, `generation`, `parents`, position, angle, radius, and full `dna`. `parents` lists the uids the organism descends from (two for sexual reproduction, one for asexual cloning, empty for the founding population), so the pedigree of a run can be reconstructed offline.
 - `meta.json` and `map.json` — run metadata and the tile map.
+- `frames/frame_<n>.png` — only with `uv run wee-life2 --timelapse [TICKS]`: the board alone, without the HUD or panels, every TICKS ticks (default 100; numbered in order, so a reset never overwrites earlier frames). Off by default to save disk (~140 MB per hour at 60 FPS). `uv run wee-life2 --headless 50000` runs 50 000 ticks without a window (progress every 10%), saves a frame every 100 ticks (`--timelapse N` changes it) and at the end builds `<run>/timelapse.mp4` and prints its `file://` link. Glue them into a timelapse with `uv run python scripts/make_timelapse.py data/runs/<run> [--fps 30] [--scale 50] [--out film.mp4]` (`--scale` in percent of the board size, default 100) (needs `ffmpeg`; writes `<run>/timelapse.mp4`).
 
 `generation` lets you compare how fast different species are producing new biological generations, independent of the wall-clock tick count.
 

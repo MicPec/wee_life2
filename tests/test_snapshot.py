@@ -160,6 +160,39 @@ class TestRunLoggerSnapshot(unittest.TestCase):
             config.STATS_BASE_DIR = old_base
 
 
+class TestRunLoggerFrames(unittest.TestCase):
+    def test_frames_written_every_interval(self):
+        old_interval = config.STATS_FRAME_INTERVAL
+        old_base = config.STATS_BASE_DIR
+        config.STATS_FRAME_INTERVAL = 100
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                config.STATS_BASE_DIR = tmp
+                world = World(240, 180, tile_size=20)
+                world.clear_map()
+                logger = RunLogger(world, enabled=True)
+                try:
+                    shots = []
+                    for tick in (50, 100, 150, 200):
+                        world.tick = float(tick)
+                        logger.step(world, 0.0, frame=shots.append)
+                    # A reset rewinds the tick; frames must keep counting, not overwrite.
+                    world.tick = 0.0
+                    logger.log_reset(world)
+                    world.tick = 100.0
+                    logger.step(world, 0.0, frame=shots.append)
+                    self.assertEqual(
+                        [p.name for p in shots],
+                        ["frame_000001.png", "frame_000002.png", "frame_000003.png"],
+                    )
+                    self.assertEqual(shots[0].parent, logger.run_dir / "frames")
+                finally:
+                    logger.close()
+        finally:
+            config.STATS_FRAME_INTERVAL = old_interval
+            config.STATS_BASE_DIR = old_base
+
+
 class TestSimulationSnapshotLoad(unittest.TestCase):
     """`Simulation(snapshot=...)` restores instead of seeding a throwaway
     population, and the restored organisms land in organisms.jsonl."""

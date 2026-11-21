@@ -834,6 +834,12 @@ class Renderer:
         if 0 <= col < world.cols and 0 <= row < world.rows:
             draw_tile_highlight(self.screen, col, row, world.tile_size)
 
+    def render_board(self, world: World) -> None:
+        """Draw only the world (tiles, food, organisms): no HUD, panels or highlights."""
+        self._draw_tiles(world)
+        self._draw_food(world)
+        self._draw_organisms(world)
+
     def render(self, world: World) -> None:
         # No screen-wide background fill needed here: _draw_tiles either blits
         # the full-screen cached map or (in edit mode) fills the screen itself.

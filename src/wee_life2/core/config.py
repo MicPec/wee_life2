@@ -26,6 +26,7 @@ STATS_BASE_DIR = "data/runs"  # run output directories are created under this pa
 STATS_SAMPLE_INTERVAL = 60  # ticks between time-series samples
 STATS_CENSUS_INTERVAL = 300  # ticks between per-species census snapshots
 STATS_SNAPSHOT_INTERVAL = 10000  # ticks between full restorable snapshots (board PNG + state JSON); 0 disables
+STATS_FRAME_INTERVAL = 0  # ticks between timelapse board frames (frames/*.png, see scripts/make_timelapse.py); 0 disables, `--timelapse` sets 100
 
 # Physics / organism
 MAX_SPEED = 2.0  # maximum base movement speed
