@@ -72,6 +72,23 @@ class TestOrganism(unittest.TestCase):
         organism.update(self.world, 0.001)
         self.assertTrue(organism.is_dead)
 
+    def test_hazard_death_cause(self):
+        cases = ((config.TILE_LAVA, "lava"), (config.TILE_RADIOACTIVE, "radiation"), (config.TILE_WATER, "drowning"))
+        old_chance = config.FOOD_ON_DEATH_CHANCE
+        config.FOOD_ON_DEATH_CHANCE = 1.0
+        self.addCleanup(setattr, config, "FOOD_ON_DEATH_CHANCE", old_chance)
+        for tile, cause in cases:
+            self.world.set_tile(2, 2, tile)
+            organism = Organism(DNA([]), (50.0, 50.0))  # no genes: nothing can add energy back
+            organism.energy = 1e-9
+            self.world.food.clear()
+            organism.update(self.world, 0.1)
+            self.assertTrue(organism.is_dead)
+            self.assertEqual(self.world.deaths.get(cause), 1)
+            # The corpse's food must survive: a dead jawless organism used to eat it in the same tick.
+            self.assertEqual(len(self.world.food), 1)
+        self.assertNotIn("starvation", self.world.deaths)
+
     def test_die_leaves_food(self):
         dna = DNA.random()
         organism = Organism(dna, (100.0, 100.0))

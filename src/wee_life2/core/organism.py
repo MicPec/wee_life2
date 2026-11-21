@@ -572,7 +572,17 @@ class Organism:
             return
 
         if self.energy <= 0 and not self.is_dead:
-            self.die(world, cause="starvation")
+            # Dying on a hazard tile or in water is that tile's kill, not starvation.
+            tile = world.tile_at(self.position)
+            if tile == world.TILE_RADIOACTIVE:
+                cause = "radiation"
+            elif tile == world.TILE_LAVA:
+                cause = "lava"
+            elif tile == world.TILE_WATER and not self.amphibious:
+                cause = "drowning"
+            else:
+                cause = "starvation"
+            self.die(world, cause=cause)
 
     def die(self, world: World, cause: str = "unknown") -> None:
         if self.is_dead:
