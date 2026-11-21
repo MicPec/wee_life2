@@ -31,10 +31,12 @@ def _run_headless(sim, ticks: int) -> None:
     reported = 0
     while sim.world.tick - start < ticks:
         sim.step()
-        tenths = int(10 * (sim.world.tick - start) / ticks)
-        if tenths > reported:
-            reported = tenths
-            print(f"tick {round(sim.world.tick)} ({min(tenths, 10) * 10}%)", flush=True)
+        pct = min(int(100 * (sim.world.tick - start) / ticks), 100)
+        if pct > reported:
+            reported = pct
+            # \r redraws the same terminal line, so the bar grows in place.
+            print(f"\r[{'#' * (pct // 2):<50}] {pct:3d}%  tick {round(sim.world.tick)}", end="", flush=True)
+    print()
     sim.stats.close()
     sim.renderer.close()
     run_dir = sim.stats.run_dir
